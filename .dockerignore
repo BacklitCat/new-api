@@ -7,6 +7,10 @@ Makefile
 docs
 .eslintcache
 .gocache
-/web/node_modules
-/web/dist
+**/node_modules
+**/dist
+/data
+/logs
+/*.db
+/*.db-*
 !THIRD-PARTY-LICENSES.md
