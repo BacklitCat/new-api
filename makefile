@@ -8,7 +8,7 @@ DEV_POSTGRES_DB = new-api
 DEV_POSTGRES_USER = root
 DEV_SQLITE_PATH ?= one-api.db
 
-.PHONY: all build-web build-all-web start-api dev dev-api dev-api-rebuild dev-web reset-setup
+.PHONY: all build-web build-all-web build-image-playground start-api dev dev-api dev-api-rebuild dev-web reset-setup
 
 all: build-all-web start-api
 
@@ -18,6 +18,9 @@ build-web:
 	@cd $(WEB_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$$(cat ../VERSION) bun run build
 
 build-all-web: build-web
+
+build-image-playground:
+	@./scripts/build-image-playground.sh
 
 start-api:
 	@echo "Starting api dev server..."

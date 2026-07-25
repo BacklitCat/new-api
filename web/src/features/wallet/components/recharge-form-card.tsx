@@ -52,6 +52,7 @@ import type {
   WaffoPayMethod,
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
+import { ManualTopupCard } from './manual-topup-card'
 
 interface RechargeFormCardProps {
   topupInfo: TopupInfo | null
@@ -471,7 +472,13 @@ export function RechargeFormCard({
             </>
           )}
         </div>
-      ) : (
+      ) : null}
+
+      {!hasAnyTopup && topupInfo?.xianyu_link ? (
+        <ManualTopupCard xianyuLink={topupInfo.xianyu_link} />
+      ) : null}
+
+      {!hasAnyTopup && !topupInfo?.xianyu_link ? (
         <Alert>
           <AlertDescription>
             {t(
@@ -479,7 +486,7 @@ export function RechargeFormCard({
             )}
           </AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
       {/* Creem Products Section */}
       {enableCreemTopup &&

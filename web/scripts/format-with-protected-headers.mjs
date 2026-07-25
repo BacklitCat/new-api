@@ -59,7 +59,9 @@ function extensionOf(path) {
 function walk(dir, files = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
+      const relativeDir = relative(root, join(dir, entry.name))
       if (!excludedDirs.has(entry.name)) {
+        if (relativeDir === 'public/image-playground') continue
         walk(join(dir, entry.name), files)
       }
       continue

@@ -246,6 +246,11 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
 		}
+		playgroundRoute := apiRouter.Group("/playground")
+		playgroundRoute.Use(middleware.UserAuth())
+		{
+			playgroundRoute.GET("/image/tokens", controller.GetImagePlaygroundTokens)
+		}
 
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())

@@ -26,7 +26,15 @@ import { useTheme } from '@/context/theme-provider'
 import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { CTA, Features, Hero, HowItWorks, Stats } from './components'
+import {
+  CTA,
+  CustomHomeContent,
+  Features,
+  Hero,
+  HowItWorks,
+  Stats,
+} from './components'
+import { parsePlainHomeHero } from './components/sections/custom-home-content-parser'
 import { useHomePageContent } from './hooks'
 
 export function Home() {
@@ -93,6 +101,17 @@ export function Home() {
     }
 
     const contentIsHtml = isLikelyHtml(content)
+
+    if (!contentIsHtml && parsePlainHomeHero(content)) {
+      return (
+        <PublicLayout showMainContainer={false}>
+          <main className='overflow-x-hidden'>
+            <CustomHomeContent content={content} />
+            <Footer />
+          </main>
+        </PublicLayout>
+      )
+    }
 
     if (contentIsHtml) {
       return (

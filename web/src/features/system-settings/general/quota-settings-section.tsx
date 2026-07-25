@@ -56,6 +56,7 @@ const quotaSchema = z.object({
   QuotaForInviter: z.coerce.number().min(0),
   QuotaForInvitee: z.coerce.number().min(0),
   TopUpLink: z.string(),
+  XianyuLink: z.string(),
   general_setting: z.object({
     docs_link: z.string(),
   }),
@@ -277,6 +278,28 @@ export function QuotaSettingsSection({
                   </FormControl>
                   <FormDescription>
                     {t('External link for users to purchase quota')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='XianyuLink'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Xianyu Link')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={t('https://2.taobao.com/item.htm?id=...')}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Xianyu trading link shown when online topup is disabled'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

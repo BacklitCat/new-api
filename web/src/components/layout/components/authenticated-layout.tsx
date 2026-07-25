@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useRouterState } from '@tanstack/react-router'
+
 import { AnimatedOutlet } from '@/components/page-transition'
 import { SkipToMain } from '@/components/skip-to-main'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -26,6 +28,7 @@ import { cn } from '@/lib/utils'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { PersistentImageGenerationFrame } from './persistent-image-generation-frame'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -33,6 +36,11 @@ type AuthenticatedLayoutProps = {
 
 export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+  const isImageGenerationRoute = useRouterState({
+    select: (state) =>
+      state.location.pathname === '/image-generation' ||
+      state.location.pathname.startsWith('/image-generation/'),
+  })
 
   return (
     <LayoutProvider>
@@ -50,7 +58,15 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
                 'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
               )}
             >
-              {props.children ?? <AnimatedOutlet />}
+              <div
+                className={cn(
+                  'flex min-h-0 flex-1 flex-col',
+                  isImageGenerationRoute && 'hidden'
+                )}
+              >
+                {props.children ?? <AnimatedOutlet />}
+              </div>
+              <PersistentImageGenerationFrame active={isImageGenerationRoute} />
             </SidebarInset>
           </div>
         </SidebarProvider>

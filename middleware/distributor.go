@@ -83,20 +83,39 @@ func Distribute() func(c *gin.Context) {
 				}
 				var selectGroup string
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-				// check path is /pg/chat/completions
-				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
-					playgroundRequest := &dto.PlayGroundRequest{}
-					err = common.UnmarshalBodyReusable(c, playgroundRequest)
-					if err != nil {
-						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidPlayground, map[string]any{"Error": err.Error()}))
-						return
+				// Playground requests may carry a user-selected group. When a
+				// concrete token is selected for playground, the token group wins.
+				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") || ((isPlaygroundImagePath(c.Request.URL.Path) || isPlaygroundResponsesPath(c.Request.URL.Path)) && !c.GetBool(playgroundSelectedTokenContextKey)) {
+					var playgroundGroup string
+					if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
+						playgroundRequest := &dto.PlayGroundRequest{}
+						err = common.UnmarshalBodyReusable(c, playgroundRequest)
+						if err != nil {
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidPlayground, map[string]any{"Error": err.Error()}))
+							return
+						}
+						playgroundGroup = playgroundRequest.Group
+					} else if isPlaygroundResponsesPath(c.Request.URL.Path) {
+						playgroundRequest, requestErr := getModelFromRequest(c)
+						if requestErr != nil {
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": requestErr.Error()}))
+							return
+						}
+						playgroundGroup = playgroundRequest.Group
+					} else {
+						playgroundRequest, requestErr := parsePlaygroundImageRequestMeta(c)
+						if requestErr != nil {
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": requestErr.Error()}))
+							return
+						}
+						playgroundGroup = playgroundRequest.Group
 					}
-					if playgroundRequest.Group != "" {
-						if !service.GroupInUserUsableGroups(usingGroup, playgroundRequest.Group) && playgroundRequest.Group != usingGroup {
+					if playgroundGroup != "" {
+						if !service.GroupInUserUsableGroups(usingGroup, playgroundGroup) && playgroundGroup != usingGroup {
 							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 							return
 						}
-						usingGroup = playgroundRequest.Group
+						usingGroup = playgroundGroup
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 					}
 				}
@@ -364,9 +383,9 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			modelRequest.Model = c.Param("model")
 		}
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") {
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") || strings.HasPrefix(c.Request.URL.Path, "/pg/images/generations") {
 		modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "dall-e")
-	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/images/edits") {
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/images/edits") || strings.HasPrefix(c.Request.URL.Path, "/pg/images/edits") {
 		//modelRequest.Model = common.GetStringIfEmpty(c.PostForm("model"), "gpt-image-1")
 		contentType := c.ContentType()
 		if slices.Contains([]string{gin.MIMEPOSTForm, gin.MIMEMultipartPOSTForm}, contentType) {
@@ -398,13 +417,15 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		c.Set("relay_mode", relayMode)
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
-		// playground chat completions
+	if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") || isPlaygroundImagePath(c.Request.URL.Path) || isPlaygroundResponsesPath(c.Request.URL.Path) {
+		// Playground requests use dashboard authentication and relay routing.
 		req, err := getModelFromRequest(c)
 		if err != nil {
 			return nil, false, err
 		}
-		modelRequest.Model = req.Model
+		if req.Model != "" || strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") || isPlaygroundResponsesPath(c.Request.URL.Path) {
+			modelRequest.Model = req.Model
+		}
 		modelRequest.Group = req.Group
 		common.SetContextKey(c, constant.ContextKeyTokenGroup, modelRequest.Group)
 	}

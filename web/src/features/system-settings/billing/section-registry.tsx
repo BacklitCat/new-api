@@ -63,6 +63,7 @@ const BILLING_SECTIONS = [
           QuotaForInviter: settings.QuotaForInviter,
           QuotaForInvitee: settings.QuotaForInvitee,
           TopUpLink: settings.TopUpLink,
+          XianyuLink: settings.XianyuLink,
           general_setting: {
             docs_link: settings['general_setting.docs_link'],
           },

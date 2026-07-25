@@ -74,6 +74,18 @@ export function SidebarModulesCard() {
       ],
     },
     {
+      key: 'image',
+      title: t('Image area'),
+      description: t('Image tools and generation workspace.'),
+      modules: [
+        {
+          key: 'generation',
+          title: t('Image Generation'),
+          description: t('Create images from text prompts and references.'),
+        },
+      ],
+    },
+    {
       key: 'console',
       title: t('Console Area'),
       description: t('Data management and log viewing'),

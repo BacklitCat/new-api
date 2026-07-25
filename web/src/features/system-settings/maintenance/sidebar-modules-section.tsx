@@ -69,6 +69,10 @@ export function SidebarModulesSection({
       title: t('Chat area'),
       description: t('Playground experiments and live conversations.'),
     },
+    image: {
+      title: t('Image area'),
+      description: t('Image tools and generation workspace.'),
+    },
     console: {
       title: t('Console area'),
       description: t('Dashboards, tokens, and usage analytics.'),
@@ -95,6 +99,12 @@ export function SidebarModulesSection({
       chat: {
         title: t('Chat'),
         description: t('Access previous conversations and start new ones.'),
+      },
+    },
+    image: {
+      generation: {
+        title: t('Image Generation'),
+        description: t('Create images from text prompts and references.'),
       },
     },
     console: {
