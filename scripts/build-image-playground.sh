@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PLAYGROUND_DIR="${IMAGE_PLAYGROUND_DIR:-/tmp/gpt_image_playground}"
+PLAYGROUND_DIR="${IMAGE_PLAYGROUND_DIR:-$HOME/Projects/gpt_image_playground}"
 DEST_DIR="${IMAGE_PLAYGROUND_DEST:-$ROOT_DIR/web/public/image-playground}"
 PATCH_DIR="$ROOT_DIR/scripts/image-playground-patches"
 SOURCE_REPO="https://github.com/CookSleep/gpt_image_playground.git"

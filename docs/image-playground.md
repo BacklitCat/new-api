@@ -16,11 +16,11 @@ while preserving the hosted integration and subsequent fixes in this repository.
 
 ## Source Checkout
 
-The build script uses `/tmp/gpt_image_playground` by default:
+The build script uses `~/Projects/gpt_image_playground` by default:
 
 ```bash
-git clone https://github.com/CookSleep/gpt_image_playground.git /tmp/gpt_image_playground
-git -C /tmp/gpt_image_playground checkout 85af98984d866c574f7007245b3acded250efa6b
+git clone https://github.com/CookSleep/gpt_image_playground.git ~/Projects/gpt_image_playground
+git -C ~/Projects/gpt_image_playground checkout 85af98984d866c574f7007245b3acded250efa6b
 ```
 
 Set `IMAGE_PLAYGROUND_DIR` to use another checkout.
