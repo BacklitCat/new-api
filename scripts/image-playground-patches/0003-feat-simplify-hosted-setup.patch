@@ -1,0 +1,167 @@
+diff --git a/src/components/NewApiHostedTokenSelect.tsx b/src/components/NewApiHostedTokenSelect.tsx
+index 21fb6f2..b839903 100644
+--- a/src/components/NewApiHostedTokenSelect.tsx
++++ b/src/components/NewApiHostedTokenSelect.tsx
+@@ -33,2 +33,2 @@ export default function NewApiHostedTokenSelect() {
+-        if (selectedId > 0 && !items.some((item) => item.id === selectedId)) {
+-          setSelectedId(0)
++        setSelectedId((currentId) => {
++          if (currentId <= 0 || items.some((item) => item.id === currentId)) return currentId
+@@ -36 +36,2 @@ export default function NewApiHostedTokenSelect() {
+-        }
++          return 0
++        })
+@@ -47 +48 @@ export default function NewApiHostedTokenSelect() {
+-  }, [accessToken, selectedId])
++  }, [accessToken])
+@@ -53 +54 @@ export default function NewApiHostedTokenSelect() {
+-    { label: '默认用户分组', value: '0' },
++    { label: '账户默认（无需令牌）', value: '0' },
+@@ -61 +62 @@ export default function NewApiHostedTokenSelect() {
+-    <div className='hidden min-w-36 md:block' title={error || '选择 New API 令牌'}>
++    <div className='hidden min-w-40 md:block' title={error || '选择 API 令牌（可选）'}>
+diff --git a/src/components/SettingsModal.tsx b/src/components/SettingsModal.tsx
+index bbd5f59..2707f3b 100644
+--- a/src/components/SettingsModal.tsx
++++ b/src/components/SettingsModal.tsx
+@@ -5,0 +6 @@ import { isApiProxyAvailable, isApiProxyLocked, readClientDevProxyConfig } from
++import { NEW_API_HOSTED } from '../lib/newApiHosted'
+@@ -1101 +1102 @@ export default function SettingsModal() {
+-                API 配置
++                {NEW_API_HOSTED ? '连接状态' : 'API 配置'}
+@@ -1172 +1173,17 @@ export default function SettingsModal() {
+-            {activeTab === 'api' && (
++            {activeTab === 'api' && NEW_API_HOSTED && (
++              <div className="space-y-4">
++                <div className="rounded-2xl border border-blue-200/70 bg-blue-50/70 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
++                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">主站 API 已自动连接</h3>
++                  <p data-selectable-text className="mt-2 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
++                    API 地址和访问凭据由主站安全托管，无需填写 API Key，也无需切换 Images 或 Responses 接口。
++                  </p>
++                  <ul className="mt-3 list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
++                    <li>可在页面顶部选择自己的 API 令牌。</li>
++                    <li>没有新建令牌或选择“账户默认”时，直接使用当前账户的默认分组和额度。</li>
++                    <li>进入 Agent 模式时会自动使用 Responses API。</li>
++                  </ul>
++                </div>
++              </div>
++            )}
++
++            {activeTab === 'api' && !NEW_API_HOSTED && (
+diff --git a/src/components/settings/AgentSettingsTab.tsx b/src/components/settings/AgentSettingsTab.tsx
+index be12cdd..7efbdf3 100644
+--- a/src/components/settings/AgentSettingsTab.tsx
++++ b/src/components/settings/AgentSettingsTab.tsx
+@@ -7 +7,2 @@ import {
+-import { normalizeAgentMaxToolRounds } from '../../lib/apiProfiles'
++import { DEFAULT_RESPONSES_MODEL, normalizeAgentMaxToolRounds } from '../../lib/apiProfiles'
++import { NEW_API_HOSTED } from '../../lib/newApiHosted'
+@@ -42 +43,10 @@ export default function AgentSettingsTab({
+-      <div className="block">
++      {NEW_API_HOSTED ? (
++        <div className="rounded-2xl border border-blue-200/70 bg-blue-50/70 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
++          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Agent API 已自动配置</h3>
++          <p data-selectable-text className="mt-2 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
++            当前自动使用 Responses API 和模型 <code className="rounded bg-white/80 px-1 py-0.5 font-mono text-[10px] dark:bg-white/10">{selectedAgentTextProfile?.model || DEFAULT_RESPONSES_MODEL}</code>，无需手动切换接口。
++          </p>
++        </div>
++      ) : (
++        <>
++          <div className="block">
+@@ -62 +72 @@ export default function AgentSettingsTab({
+-      </div>
++          </div>
+@@ -64,2 +74,2 @@ export default function AgentSettingsTab({
+-      {draft.agentApiConfigMode !== 'off' && (
+-        <>
++          {draft.agentApiConfigMode !== 'off' && (
++            <>
+@@ -106,0 +117,2 @@ export default function AgentSettingsTab({
++            </>
++          )}
+diff --git a/src/lib/apiProfiles.ts b/src/lib/apiProfiles.ts
+index e51a361..ffa464d 100644
+--- a/src/lib/apiProfiles.ts
++++ b/src/lib/apiProfiles.ts
+@@ -37,0 +38 @@ export const DEFAULT_API_TIMEOUT = 600
++const NEW_API_HOSTED_AGENT_PROFILE_ID = 'new-api-hosted-agent'
+@@ -522 +523 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
+-  const profiles = Array.isArray(record.profiles) && record.profiles.length
++  const normalizedProfiles = Array.isArray(record.profiles) && record.profiles.length
+@@ -524,0 +526,13 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
++  const existingHostedAgentProfile = NEW_API_HOSTED
++    ? normalizedProfiles.find(isAgentTextApiProfile)
++    : null
++  const hostedAgentProfile = NEW_API_HOSTED
++    ? existingHostedAgentProfile ?? createDefaultOpenAIProfile({
++        id: NEW_API_HOSTED_AGENT_PROFILE_ID,
++        name: 'Agent',
++        apiMode: 'responses',
++      })
++    : null
++  const profiles = hostedAgentProfile && !existingHostedAgentProfile
++    ? [...normalizedProfiles, hostedAgentProfile]
++    : normalizedProfiles
+@@ -529 +543 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
+-  const agentApiConfigMode = normalizeAgentApiConfigMode(record.agentApiConfigMode)
++  const agentApiConfigMode = NEW_API_HOSTED ? 'native' : normalizeAgentApiConfigMode(record.agentApiConfigMode)
+@@ -531,3 +545,5 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
+-  const agentTextProfileId = typeof record.agentTextProfileId === 'string' && profiles.some((p) => p.id === record.agentTextProfileId && isAgentTextApiProfile(p))
+-    ? record.agentTextProfileId
+-    : (isAgentTextApiProfile(active) ? active.id : firstAgentTextProfile?.id ?? null)
++  const agentTextProfileId = hostedAgentProfile?.id ?? (
++    typeof record.agentTextProfileId === 'string' && profiles.some((p) => p.id === record.agentTextProfileId && isAgentTextApiProfile(p))
++      ? record.agentTextProfileId
++      : (isAgentTextApiProfile(active) ? active.id : firstAgentTextProfile?.id ?? null)
++  )
+diff --git a/src/lib/newApiHostedSetup.test.ts b/src/lib/newApiHostedSetup.test.ts
+new file mode 100644
+--- /dev/null
++++ b/src/lib/newApiHostedSetup.test.ts
+@@ -0,0 +1,46 @@
++// @vitest-environment jsdom
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++
++describe('New API hosted setup', () => {
++  beforeEach(() => {
++    vi.resetModules()
++    vi.stubEnv('VITE_NEW_API_HOSTED', 'true')
++    window.localStorage.clear()
++  })
++
++  afterEach(() => {
++    vi.unstubAllEnvs()
++  })
++
++  it('uses the account default when no API token has been selected', async () => {
++    const hosted = await import('./newApiHosted')
++
++    expect(hosted.withNewApiHostedToken({ model: 'gpt-image-2' })).toEqual({
++      model: 'gpt-image-2',
++    })
++  })
++
++  it('provides a valid Responses profile for Agent mode automatically', async () => {
++    const profiles = await import('./apiProfiles')
++    const galleryProfile = profiles.createDefaultOpenAIProfile()
++    const settings = profiles.normalizeSettings({
++      ...profiles.DEFAULT_SETTINGS,
++      profiles: [galleryProfile],
++      activeProfileId: galleryProfile.id,
++      agentApiConfigMode: 'off',
++      agentTextProfileId: null,
++    })
++
++    expect(profiles.getActiveApiProfile(settings).apiMode).toBe('images')
++    expect(settings.agentApiConfigMode).toBe('native')
++
++    const agentProfile = profiles.getAgentTextApiProfile(settings)
++    expect(agentProfile).toMatchObject({
++      provider: 'openai',
++      apiMode: 'responses',
++      model: profiles.DEFAULT_RESPONSES_MODEL,
++    })
++    expect(agentProfile && profiles.validateApiProfile(agentProfile)).toBeNull()
++  })
++})

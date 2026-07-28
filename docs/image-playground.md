@@ -10,10 +10,9 @@ The reproducible source baseline is pinned to:
 85af98984d866c574f7007245b3acded250efa6b
 ```
 
-New API-specific behavior is stored in
-`scripts/image-playground-patches/0001-feat-add-New-API-hosted-integration.patch`.
-The patch keeps upstream source separate while preserving the hosted integration
-in this repository.
+New API-specific behavior is stored as ordered patches under
+`scripts/image-playground-patches/`. The patches keep upstream source separate
+while preserving the hosted integration and subsequent fixes in this repository.
 
 ## Source Checkout
 
@@ -34,9 +33,9 @@ From the new-api repository root:
 make build-image-playground
 ```
 
-The script applies the tracked hosted patch when necessary, builds with
-`VITE_NEW_API_HOSTED=true`, syncs `dist/` into the dashboard public assets,
-verifies the runtime markers, and restores a clean pinned source checkout.
+The script applies the tracked hosted patches in filename order when necessary,
+builds with `VITE_NEW_API_HOSTED=true`, syncs `dist/` into the dashboard public
+assets, verifies the runtime markers, and restores a clean pinned source checkout.
 
 ## Runtime Contract
 
@@ -46,8 +45,13 @@ verifies the runtime markers, and restores a clean pinned source checkout.
   Responses profiles to `gpt-5.6-sol`.
 - The parent dashboard sends its short-lived dashboard access token to the
   same-origin iframe. The iframe never receives a real API token key.
+- API token selection is optional. Without a selected token, the backend uses
+  the signed-in account's default group and quota through a temporary request
+  context, so users do not need to create a token before using the playground.
 - A selected API token is represented only by `token_id`; the backend verifies
   ownership, status, IP restrictions, group access, and quota before relaying.
+- Agent mode receives a managed Responses profile automatically and does not
+  require users to switch the gallery profile away from Images API.
 - The dashboard keeps the iframe mounted after the first visit so navigation
   does not interrupt an in-flight image request.
 

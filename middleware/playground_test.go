@@ -1,12 +1,42 @@
 package middleware
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestPlaygroundImageTokenContextAllowsAccountDefaultWithoutToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	continued := false
+	router.POST(
+		"/pg/images/generations",
+		PlaygroundImageTokenContext(),
+		func(c *gin.Context) {
+			continued = true
+			c.Status(http.StatusNoContent)
+		},
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/pg/images/generations",
+		strings.NewReader(`{"model":"gpt-image-2"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code)
+	assert.True(t, continued)
+}
 
 func TestParsePlaygroundImageRequestMetaFromJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)

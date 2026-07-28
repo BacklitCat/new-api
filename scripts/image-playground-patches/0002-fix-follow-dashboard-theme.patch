@@ -1,0 +1,201 @@
+diff --git a/src/index.css b/src/index.css
+index 1c2cc04..47c5380 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -72,13 +72,12 @@ body.drag-selecting * {
+-@media (prefers-color-scheme: dark) {
+-  :root {
+-    --background: 240 10% 4%;
+-    --foreground: 0 0% 98%;
+-    --muted: 240 4% 16%;
+-    --muted-foreground: 240 5% 65%;
+-    --border: 240 4% 22%;
+-    --input: 240 4% 22%;
+-    --primary: 217 91% 60%;
+-    --primary-foreground: 0 0% 100%;
+-    --sidebar: 240 5% 12%;
+-    --sidebar-foreground: 0 0% 98%;
+-  }
++html.dark {
++  --background: 240 10% 4%;
++  --foreground: 0 0% 98%;
++  --muted: 240 4% 16%;
++  --muted-foreground: 240 5% 65%;
++  --border: 240 4% 22%;
++  --input: 240 4% 22%;
++  --primary: 217 91% 60%;
++  --primary-foreground: 0 0% 100%;
++  --sidebar: 240 5% 12%;
++  --sidebar-foreground: 0 0% 98%;
++}
+@@ -86,3 +85,2 @@ body.drag-selecting * {
+-  * {
+-    scrollbar-color: #3f3f46 transparent;
+-  }
++html.dark * {
++  scrollbar-color: #3f3f46 transparent;
+@@ -106,4 +104,2 @@ input[type="number"] {
+-@media (prefers-color-scheme: dark) {
+-  ::-webkit-scrollbar-thumb { background: #3f3f46; }
+-  ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+-}
++html.dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
++html.dark ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+@@ -142,5 +138,3 @@ input[type="number"] {
+-@media (prefers-color-scheme: dark) {
+-  .agent-web-search-running-text {
+-    --agent-web-search-text: #9ca3af;
+-    --agent-web-search-highlight: #ffffff;
+-  }
++html.dark .agent-web-search-running-text {
++  --agent-web-search-text: #9ca3af;
++  --agent-web-search-highlight: #ffffff;
+@@ -249,4 +243,3 @@ input[type="number"] {
+-@media (prefers-color-scheme: dark) {
+-  .markdown-renderer :where(blockquote) {
+-    color: #a1a1aa;
+-  }
++html.dark .markdown-renderer :where(blockquote) {
++  color: #a1a1aa;
++}
+@@ -254,3 +247,3 @@ input[type="number"] {
+-  .markdown-renderer :where(a) {
+-    color: #60a5fa;
+-  }
++html.dark .markdown-renderer :where(a) {
++  color: #60a5fa;
++}
+@@ -258,3 +251,3 @@ input[type="number"] {
+-  .markdown-renderer :where(:not(pre) > code) {
+-    background: rgba(255, 255, 255, 0.1);
+-  }
++html.dark .markdown-renderer :where(:not(pre) > code) {
++  background: rgba(255, 255, 255, 0.1);
++}
+@@ -262,3 +255,3 @@ input[type="number"] {
+-  .markdown-renderer :where(th, td) {
+-    border-color: rgba(255, 255, 255, 0.12);
+-  }
++html.dark .markdown-renderer :where(th, td) {
++  border-color: rgba(255, 255, 255, 0.12);
++}
+@@ -266,3 +259,2 @@ input[type="number"] {
+-  .markdown-renderer :where(th) {
+-    background: rgba(255, 255, 255, 0.06);
+-  }
++html.dark .markdown-renderer :where(th) {
++  background: rgba(255, 255, 255, 0.06);
+@@ -453,6 +445,5 @@ input[type="number"] {
+-@media (prefers-color-scheme: dark) {
+-  .mention-tag {
+-    background: rgba(59, 130, 246, 0.12);
+-    color: #93c5fd;
+-    border-color: rgba(59, 130, 246, 0.2);
+-  }
++html.dark .mention-tag {
++  background: rgba(59, 130, 246, 0.12);
++  color: #93c5fd;
++  border-color: rgba(59, 130, 246, 0.2);
++}
+@@ -460,5 +451,5 @@ input[type="number"] {
+-  .mention-tag::selection,
+-  .mention-tag *::selection {
+-    background: transparent !important;
+-    color: inherit !important;
+-  }
++html.dark .mention-tag::selection,
++html.dark .mention-tag *::selection {
++  background: transparent !important;
++  color: inherit !important;
++}
+@@ -466,5 +457,5 @@ input[type="number"] {
+-  [contenteditable]::selection,
+-  [contenteditable] *::selection {
+-    background: rgba(59, 130, 246, 0.3);
+-    color: inherit;
+-  }
++html.dark [contenteditable]::selection,
++html.dark [contenteditable] *::selection {
++  background: rgba(59, 130, 246, 0.3);
++  color: inherit;
++}
+@@ -472,3 +463,3 @@ input[type="number"] {
+-  .mention-tag:hover {
+-    background: rgba(59, 130, 246, 0.2);
+-  }
++html.dark .mention-tag:hover {
++  background: rgba(59, 130, 246, 0.2);
++}
+@@ -476,6 +467,5 @@ input[type="number"] {
+-  .mention-tag.selected {
+-    background: #3b82f6;
+-    color: #ffffff;
+-    border-color: #60a5fa;
+-    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.35);
+-  }
++html.dark .mention-tag.selected {
++  background: #3b82f6;
++  color: #ffffff;
++  border-color: #60a5fa;
++  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.35);
+diff --git a/tailwind.config.js b/tailwind.config.js
+index c7dd5b4..3cd9417 100644
+--- a/tailwind.config.js
++++ b/tailwind.config.js
+@@ -5 +5 @@ export default {
+-  darkMode: 'media',
++  darkMode: 'class',
+diff --git a/src/lib/newApiHosted.theme.test.ts b/src/lib/newApiHosted.theme.test.ts
+new file mode 100644
+--- /dev/null
++++ b/src/lib/newApiHosted.theme.test.ts
+@@ -0,0 +1,49 @@
++// @vitest-environment jsdom
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++
++describe('New API hosted theme integration', () => {
++  beforeEach(() => {
++    vi.resetModules()
++    vi.stubEnv('VITE_NEW_API_HOSTED', 'true')
++  })
++
++  afterEach(() => {
++    document.documentElement.classList.remove('light', 'dark')
++    vi.unstubAllEnvs()
++  })
++
++  it('follows light and dark theme updates from the parent dashboard', async () => {
++    const parentWindow = { postMessage: vi.fn() } as unknown as Window
++    vi.spyOn(window, 'parent', 'get').mockReturnValue(parentWindow)
++    const hosted = await import('./newApiHosted')
++    const cleanup = hosted.initializeNewApiHostedBridge()
++
++    window.dispatchEvent(
++      new MessageEvent('message', {
++        source: parentWindow,
++        origin: window.location.origin,
++        data: {
++          type: 'new-api:image-playground-context',
++          theme: 'dark',
++        },
++      })
++    )
++    expect(document.documentElement.classList.contains('dark')).toBe(true)
++
++    window.dispatchEvent(
++      new MessageEvent('message', {
++        source: parentWindow,
++        origin: window.location.origin,
++        data: {
++          type: 'new-api:image-playground-context',
++          theme: 'light',
++        },
++      })
++    )
++    expect(document.documentElement.classList.contains('light')).toBe(true)
++    expect(document.documentElement.classList.contains('dark')).toBe(false)
++
++    cleanup()
++  })
++})
