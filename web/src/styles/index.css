@@ -520,6 +520,112 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
+/* Easy homepage — a deliberately light, blueprint-inspired visual system. */
+.easy-home {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.26 0.07 253);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.26 0.07 253);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.26 0.07 253);
+  --primary: oklch(0.57 0.22 255);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.97 0.02 250);
+  --secondary-foreground: oklch(0.34 0.1 253);
+  --muted: oklch(0.97 0.015 250);
+  --muted-foreground: oklch(0.53 0.05 251);
+  --accent: oklch(0.96 0.025 250);
+  --accent-foreground: oklch(0.43 0.14 253);
+  --border: oklch(0.9 0.035 250);
+  --input: oklch(0.9 0.035 250);
+  --ring: oklch(0.62 0.2 253);
+  background: #fff;
+  color: #08234a;
+}
+
+.easy-hero-grid {
+  background-image:
+    linear-gradient(rgb(10 103 245 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(10 103 245 / 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 78% 42%, rgb(77 178 255 / 0.12), transparent 38%);
+  background-size:
+    56px 56px,
+    56px 56px,
+    100% 100%;
+  mask-image: linear-gradient(
+    to bottom,
+    black 10%,
+    black 74%,
+    transparent 100%
+  );
+}
+
+.easy-blueprint-glow {
+  background: radial-gradient(
+    circle,
+    rgb(92 190 255 / 0.17) 0%,
+    rgb(0 97 255 / 0.07) 40%,
+    transparent 72%
+  );
+  filter: blur(16px);
+}
+
+.easy-outline-word,
+.easy-outline-latin {
+  color: transparent;
+  -webkit-text-stroke: clamp(1.2px, 0.16vw, 2.2px) #0876f9;
+  filter: drop-shadow(0 14px 28px rgb(0 92 255 / 0.08));
+}
+
+.easy-outline-word {
+  font-size: clamp(5.6rem, 14vw, 11rem);
+  font-weight: 800;
+  letter-spacing: -0.08em;
+}
+
+.easy-outline-latin {
+  font-size: clamp(4.8rem, 13vw, 10rem);
+  font-weight: 700;
+  letter-spacing: -0.075em;
+}
+
+.easy-outline-word-ghost {
+  opacity: 0.12;
+}
+
+.easy-dash-flow {
+  animation: easy-dash-flow 18s linear infinite;
+}
+
+.easy-route-flow {
+  animation: easy-route-flow 12s linear infinite;
+}
+
+.easy-route-flow-reverse {
+  animation-direction: reverse;
+  animation-duration: 15s;
+}
+
+@keyframes easy-dash-flow {
+  to {
+    stroke-dashoffset: -180;
+  }
+}
+
+@keyframes easy-route-flow {
+  to {
+    stroke-dashoffset: -120;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .easy-dash-flow,
+  .easy-route-flow {
+    animation: none;
+  }
+}
+
 /* Micro-interactions — Vercel-style subtle hover/active feedback */
 @media (prefers-reduced-motion: no-preference) {
   [data-slot='card']:not([data-card-hover='false']) {

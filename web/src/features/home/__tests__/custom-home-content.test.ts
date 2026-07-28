@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import { parsePlainHomeHero } from '../components/sections/custom-home-content-parser'
+import { parsePlainHomeHero } from '../components/sections/custom-home-content-parser.ts'
 
 describe('parsePlainHomeHero', () => {
   test('returns up to three non-empty plain-text lines', () => {
@@ -11,8 +11,15 @@ describe('parsePlainHomeHero', () => {
     )
   })
 
-  test('leaves Markdown content to the standard rich-content renderer', () => {
-    assert.equal(parsePlainHomeHero('# Gateway\nDetails'), null)
+  test('uses a single leading Markdown heading as the hero title', () => {
+    assert.deepEqual(parsePlainHomeHero('# Gateway\nDetails'), [
+      'Gateway',
+      'Details',
+    ])
+  })
+
+  test('leaves rich Markdown content to the standard renderer', () => {
+    assert.equal(parsePlainHomeHero('# Gateway\n- First route'), null)
   })
 
   test('leaves content longer than three lines to the standard renderer', () => {

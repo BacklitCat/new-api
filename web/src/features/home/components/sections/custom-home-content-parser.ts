@@ -22,10 +22,18 @@ const markdownSyntax =
 export function parsePlainHomeHero(content: string): string[] | null {
   const lines = content
     .split('\n')
-    .map((line) => line.trim())
+    .map((line, index) => {
+      const trimmed = line.trim()
+      return index === 0 ? trimmed.replace(/^#\s+/, '').trim() : trimmed
+    })
     .filter(Boolean)
 
-  if (lines.length === 0 || lines.length > 3 || markdownSyntax.test(content)) {
+  const contentWithoutLeadingHeading = content.replace(/^\s{0,3}#\s+[^\n]+/, '')
+  if (
+    lines.length === 0 ||
+    lines.length > 3 ||
+    markdownSyntax.test(contentWithoutLeadingHeading)
+  ) {
     return null
   }
   return lines

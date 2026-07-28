@@ -26,14 +26,7 @@ import { useTheme } from '@/context/theme-provider'
 import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
-import {
-  CTA,
-  CustomHomeContent,
-  Features,
-  Hero,
-  HowItWorks,
-  Stats,
-} from './components'
+import { CustomHomeContent, Hero } from './components'
 import { parsePlainHomeHero } from './components/sections/custom-home-content-parser'
 import { useHomePageContent } from './hooks'
 
@@ -104,11 +97,14 @@ export function Home() {
 
     if (!contentIsHtml && parsePlainHomeHero(content)) {
       return (
-        <PublicLayout showMainContainer={false}>
+        <PublicLayout showMainContainer={false} className='easy-home'>
           <main className='overflow-x-hidden'>
-            <CustomHomeContent content={content} />
-            <Footer />
+            <CustomHomeContent
+              content={content}
+              isAuthenticated={isAuthenticated}
+            />
           </main>
+          <Footer />
         </PublicLayout>
       )
     }
@@ -140,12 +136,10 @@ export function Home() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
-      <Hero isAuthenticated={isAuthenticated} />
-      <Stats />
-      <Features />
-      <HowItWorks />
-      <CTA isAuthenticated={isAuthenticated} />
+    <PublicLayout showMainContainer={false} className='easy-home'>
+      <main>
+        <Hero isAuthenticated={isAuthenticated} />
+      </main>
       <Footer />
     </PublicLayout>
   )
