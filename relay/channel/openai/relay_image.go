@@ -76,6 +76,9 @@ func normalizeOpenAIUsage(usage *dto.Usage) {
 	}
 	if usage.OutputTokens != 0 {
 		usage.CompletionTokens = usage.OutputTokens
+		// The Images API produces image-only output. Preserve that classification
+		// so tiered billing charges output_tokens through img_o, not text output c.
+		usage.CompletionTokenDetails.ImageTokens = usage.OutputTokens
 	}
 	if usage.InputTokensDetails != nil {
 		usage.PromptTokensDetails.CachedTokens = usage.InputTokensDetails.CachedTokens
