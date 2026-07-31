@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
 )
 
@@ -39,11 +40,19 @@ func GetBillingMode(model string) string {
 	if mode, ok := billingSetting.BillingMode[model]; ok {
 		return mode
 	}
+	if baseModel := ratio_setting.WithoutCompactModelSuffix(model); baseModel != model {
+		if mode, ok := billingSetting.BillingMode[baseModel]; ok {
+			return mode
+		}
+	}
 	return BillingModeRatio
 }
 
 func GetBillingExpr(model string) (string, bool) {
 	expr, ok := billingSetting.BillingExpr[model]
+	if !ok {
+		expr, ok = billingSetting.BillingExpr[ratio_setting.WithoutCompactModelSuffix(model)]
+	}
 	return expr, ok
 }
 

@@ -366,13 +366,12 @@ func GetModelPrice(name string, printErr bool) (float64, bool) {
 
 	if strings.HasSuffix(name, CompactModelSuffix) {
 		price, ok := modelPriceMap.Get(CompactWildcardModelKey)
-		if !ok {
-			if printErr {
-				common.SysError("model price not found: " + name)
-			}
-			return -1, false
+		if ok {
+			return price, true
 		}
-		return price, true
+		if price, ok := modelPriceMap.Get(WithoutCompactModelSuffix(name)); ok {
+			return price, true
+		}
 	}
 
 	if printErr {
@@ -402,7 +401,9 @@ func GetModelRatio(name string) (float64, bool, string) {
 			if wildcardRatio, ok := modelRatioMap.Get(CompactWildcardModelKey); ok {
 				return wildcardRatio, true, name
 			}
-			//return 0, true, name
+			if baseRatio, ok := modelRatioMap.Get(WithoutCompactModelSuffix(name)); ok {
+				return baseRatio, true, name
+			}
 		}
 		return 37.5, operation_setting.SelfUseModeEnabled, name
 	}
@@ -448,6 +449,9 @@ func GetCompletionRatio(name string) float64 {
 	if ratio, ok := completionRatioMap.Get(name); ok {
 		return ratio
 	}
+	if strings.HasSuffix(name, CompactModelSuffix) {
+		return GetCompletionRatio(WithoutCompactModelSuffix(name))
+	}
 	return hardCodedRatio
 }
 
@@ -481,6 +485,9 @@ func GetCompletionRatioInfo(name string) CompletionRatioInfo {
 			Ratio:  ratio,
 			Locked: false,
 		}
+	}
+	if strings.HasSuffix(name, CompactModelSuffix) {
+		return GetCompletionRatioInfo(WithoutCompactModelSuffix(name))
 	}
 
 	return CompletionRatioInfo{

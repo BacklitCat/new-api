@@ -1,6 +1,8 @@
 package ratio_setting
 
 import (
+	"strings"
+
 	"github.com/QuantumNous/new-api/types"
 )
 
@@ -158,6 +160,9 @@ func UpdateCreateCacheRatioByJSONString(jsonStr string) error {
 // GetCacheRatio returns the cache ratio for a model
 func GetCacheRatio(name string) (float64, bool) {
 	ratio, ok := cacheRatioMap.Get(name)
+	if !ok && strings.HasSuffix(name, CompactModelSuffix) {
+		ratio, ok = cacheRatioMap.Get(WithoutCompactModelSuffix(name))
+	}
 	if !ok {
 		return 1, false // Default to 1 if not found
 	}
@@ -166,6 +171,9 @@ func GetCacheRatio(name string) (float64, bool) {
 
 func GetCreateCacheRatio(name string) (float64, bool) {
 	ratio, ok := createCacheRatioMap.Get(name)
+	if !ok && strings.HasSuffix(name, CompactModelSuffix) {
+		ratio, ok = createCacheRatioMap.Get(WithoutCompactModelSuffix(name))
+	}
 	if !ok {
 		return 1.25, false // Default to 1.25 if not found
 	}

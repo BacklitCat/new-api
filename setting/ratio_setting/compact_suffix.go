@@ -12,6 +12,12 @@ func WithCompactModelSuffix(modelName string) string {
 	return modelName + CompactModelSuffix
 }
 
+// WithoutCompactModelSuffix returns the upstream base model whose pricing is
+// shared by the internal /v1/responses/compact alias.
+func WithoutCompactModelSuffix(modelName string) string {
+	return strings.TrimSuffix(modelName, CompactModelSuffix)
+}
+
 func WithCompactModelVariants(models []string) []string {
 	variants := make([]string, 0, len(models)*2)
 	seen := make(map[string]struct{}, len(models)*2)
