@@ -46,50 +46,44 @@ if ! git -C "$PLAYGROUND_DIR" cat-file -e "$SOURCE_COMMIT^{commit}"; then
   exit 1
 fi
 
-patch_stack_applied=true
+applied_patch_count=0
+found_applied_patch=false
 for ((index=${#PATCH_FILES[@]} - 1; index >= 0; index--)); do
   patch_file="${PATCH_FILES[$index]}"
   if ! git -C "$PLAYGROUND_DIR" apply --unidiff-zero --reverse --check "$patch_file" >/dev/null 2>&1; then
-    patch_stack_applied=false
-    break
+    if [[ "$found_applied_patch" == "true" ]]; then
+      echo "image playground patches are not applied as a continuous prefix" >&2
+      exit 1
+    fi
+    continue
   fi
+  found_applied_patch=true
   git -C "$PLAYGROUND_DIR" apply --unidiff-zero --reverse "$patch_file"
   REVERSED_PATCHES+=("$patch_file")
+  ((applied_patch_count += 1))
 done
 restore_reversed_patches
 
-if [[ "$patch_stack_applied" == "true" ]]; then
-  for patch_file in "${PATCH_FILES[@]}"; do
-    echo "Already applied: $(basename "$patch_file")"
-  done
-else
-  applied_patch_count=0
-  for patch_file in "${PATCH_FILES[@]}"; do
-    if git -C "$PLAYGROUND_DIR" apply --unidiff-zero --reverse --check "$patch_file" >/dev/null 2>&1; then
-      ((applied_patch_count += 1))
-    fi
-  done
+current_commit="$(git -C "$PLAYGROUND_DIR" rev-parse HEAD)"
+if [[ $applied_patch_count -eq 0 && "$current_commit" != "$SOURCE_COMMIT" ]]; then
+  echo "expected source commit $SOURCE_COMMIT, found $current_commit" >&2
+  echo "Check out the pinned commit before applying the hosted integration patches." >&2
+  exit 1
+fi
 
-  current_commit="$(git -C "$PLAYGROUND_DIR" rev-parse HEAD)"
-  if [[ $applied_patch_count -eq 0 && "$current_commit" != "$SOURCE_COMMIT" ]]; then
-    echo "expected source commit $SOURCE_COMMIT, found $current_commit" >&2
-    echo "Check out the pinned commit before applying the hosted integration patches." >&2
-    exit 1
+for ((index=0; index<${#PATCH_FILES[@]}; index++)); do
+  patch_file="${PATCH_FILES[$index]}"
+  patch_name="$(basename "$patch_file")"
+  if ((index < applied_patch_count)); then
+    echo "Already applied: $patch_name"
+    continue
   fi
 
-  for patch_file in "${PATCH_FILES[@]}"; do
-    patch_name="$(basename "$patch_file")"
-    if git -C "$PLAYGROUND_DIR" apply --unidiff-zero --reverse --check "$patch_file" >/dev/null 2>&1; then
-      echo "Already applied: $patch_name"
-      continue
-    fi
-
-    git -C "$PLAYGROUND_DIR" apply --unidiff-zero --check "$patch_file"
-    git -C "$PLAYGROUND_DIR" apply --unidiff-zero "$patch_file"
-    APPLIED_PATCHES+=("$patch_file")
-    echo "Applied: $patch_name"
-  done
-fi
+  git -C "$PLAYGROUND_DIR" apply --unidiff-zero --check "$patch_file"
+  git -C "$PLAYGROUND_DIR" apply --unidiff-zero "$patch_file"
+  APPLIED_PATCHES+=("$patch_file")
+  echo "Applied: $patch_name"
+done
 
 if [[ ! -d "$PLAYGROUND_DIR/node_modules" ]]; then
   npm --prefix "$PLAYGROUND_DIR" ci

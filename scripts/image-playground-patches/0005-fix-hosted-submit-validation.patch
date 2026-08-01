@@ -1,0 +1,41 @@
+diff --git a/src/components/InputBar.tsx b/src/components/InputBar.tsx
+index 4fc0404..64a76d9 100644
+--- a/src/components/InputBar.tsx
++++ b/src/components/InputBar.tsx
+@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
+ import { deleteFavoriteCollection, useStore, submitTask, submitAgentMessage, stopAgentResponse, addImageFromFile, removeMultipleTasks, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
+ import { DEFAULT_PARAMS, type TaskRecord } from '../types'
+ import { getActiveAgentRounds } from '../lib/agentConversationState'
+-import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings } from '../lib/apiProfiles'
++import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings, validateApiProfile } from '../lib/apiProfiles'
+ import { ensureImageCached, getCachedImage } from '../lib/imageCache'
+ import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
+ import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, getPromptMentionParts, getSelectedImageMentionLabel, imageMentionMatches, insertImageMentionAtVisibleRange, insertTextMentionAtVisibleRange, isCursorInSelectedImageMention, stripImageMentionMarkers } from '../lib/promptImageMentions'
+@@ -429,7 +429,7 @@ export default function InputBar() {
+       ? settings
+       : normalizeSettings({ ...settings, activeProfileId: activeProfile.id })
+   ), [activeProfile.id, settingsActiveProfile.id, settings])
+-  const hasSubmitApiConfig = Boolean(activeProfile.apiKey)
++  const hasSubmitApiConfig = validateApiProfile(activeProfile) === null
+   const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig && !activeAgentIsRunning)
+   const submitButtonAriaLabel = activeAgentIsRunning
+     ? '停止生成'
+diff --git a/src/lib/newApiHostedSetup.test.ts b/src/lib/newApiHostedSetup.test.ts
+index a1a1ff3..361556c 100644
+--- a/src/lib/newApiHostedSetup.test.ts
++++ b/src/lib/newApiHostedSetup.test.ts
+@@ -21,6 +21,14 @@ describe('New API hosted setup', () => {
+     })
+   })
+
++  it('accepts the hosted gallery profile without an API key', async () => {
++    const profiles = await import('./apiProfiles')
++    const galleryProfile = profiles.createDefaultOpenAIProfile()
++
++    expect(galleryProfile.apiKey).toBe('')
++    expect(profiles.validateApiProfile(galleryProfile)).toBeNull()
++  })
++
+   it('provides a valid Responses profile for Agent mode automatically', async () => {
+     const profiles = await import('./apiProfiles')
+     const galleryProfile = profiles.createDefaultOpenAIProfile()

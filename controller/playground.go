@@ -154,6 +154,9 @@ func GetImagePlaygroundTokens(c *gin.Context) {
 
 	options := make([]imagePlaygroundTokenOption, 0, len(tokens))
 	for _, token := range tokens {
+		if token.Status != common.TokenStatusEnabled {
+			continue
+		}
 		options = append(options, imagePlaygroundTokenOption{
 			Id:     token.Id,
 			Name:   token.Name,
