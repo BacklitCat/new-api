@@ -1,0 +1,68 @@
+diff --git a/public/sw.js b/public/sw.js
+index e2884c4..48c9b9d 100644
+--- a/public/sw.js
++++ b/public/sw.js
+@@ -1 +1 @@
+-const CACHE_NAME = 'gpt-image-playground-v0.1.5'
++const CACHE_NAME = 'gpt-image-playground-v0.1.6'
+@@ -2,0 +3 @@
++const SCOPE_PATH = new URL(self.registration.scope).pathname
+@@ -26 +27 @@ self.addEventListener('fetch', (event) => {
+-  if (url.origin !== self.location.origin) return
++  if (url.origin !== self.location.origin || !url.pathname.startsWith(SCOPE_PATH)) return
+diff --git a/src/lib/serviceWorker.test.js b/src/lib/serviceWorker.test.js
+new file mode 100644
+index 0000000..756dd33
+--- /dev/null
++++ b/src/lib/serviceWorker.test.js
+@@ -0,0 +1,50 @@
++import { readFileSync } from 'node:fs'
++import vm from 'node:vm'
++
++import { describe, expect, it, vi } from 'vitest'
++
++describe('image playground service worker', () => {
++  it('does not intercept authenticated API requests outside its asset scope', () => {
++    const listeners = new Map()
++    const caches = {
++      delete: vi.fn(),
++      keys: vi.fn(),
++      match: vi.fn(),
++      open: vi.fn(),
++    }
++    const serviceWorker = {
++      addEventListener: vi.fn((type, listener) => {
++        listeners.set(type, listener)
++      }),
++      clients: { claim: vi.fn() },
++      location: { origin: 'https://new-api.example.com' },
++      registration: {
++        scope: 'https://new-api.example.com/image-playground/',
++      },
++      skipWaiting: vi.fn(),
++    }
++    const source = readFileSync(
++      new URL('../../public/sw.js', import.meta.url),
++      'utf8',
++    )
++    vm.runInNewContext(source, {
++      URL,
++      caches,
++      fetch: vi.fn(),
++      self: serviceWorker,
++    })
++    const respondWith = vi.fn()
++
++    listeners.get('fetch')?.({
++      request: {
++        method: 'GET',
++        mode: 'cors',
++        url: 'https://new-api.example.com/api/playground/image/tokens',
++      },
++      respondWith,
++    })
++
++    expect(respondWith).not.toHaveBeenCalled()
++    expect(caches.match).not.toHaveBeenCalled()
++  })
++})

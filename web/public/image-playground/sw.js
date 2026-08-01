@@ -1,5 +1,6 @@
-const CACHE_NAME = 'gpt-image-playground-v0.1.5'
+const CACHE_NAME = 'gpt-image-playground-v0.1.6'
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './pwa-icon.svg']
+const SCOPE_PATH = new URL(self.registration.scope).pathname
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -23,7 +24,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
 
   const url = new URL(request.url)
-  if (url.origin !== self.location.origin) return
+  if (url.origin !== self.location.origin || !url.pathname.startsWith(SCOPE_PATH)) return
 
   if (request.mode === 'navigate') {
     event.respondWith(
