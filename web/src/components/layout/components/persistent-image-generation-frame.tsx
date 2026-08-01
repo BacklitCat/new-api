@@ -70,8 +70,9 @@ export function PersistentImageGenerationFrame(
   }, [accessToken, resolvedTheme])
 
   useEffect(() => {
+    if (!props.active) return
     void syncIframeContext()
-  }, [syncIframeContext])
+  }, [props.active, syncIframeContext])
 
   useEffect(() => {
     if (!accessExpiresAt) return
