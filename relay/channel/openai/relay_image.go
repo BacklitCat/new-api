@@ -49,6 +49,8 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
 
+	responseBody = downloadPlaygroundImageURLs(c, info, responseBody)
+
 	updateOpenAIImageCount(info, gjson.GetBytes(responseBody, "data.#").Int())
 
 	// 写入新的 response body
@@ -252,6 +254,8 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	if oaiError := usageResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+
+	responseBody = downloadPlaygroundImageURLs(c, info, responseBody)
 	normalizeOpenAIUsage(&usageResp.Usage)
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
 
@@ -329,6 +333,43 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 	}
 	return &usageResp.Usage, nil
+}
+
+// downloadPlaygroundImageURLs makes image responses usable by the embedded
+// playground even when the upstream returns a URL without CORS headers. The
+// original URL is kept for diagnostics and fallback display; b64_json lets
+// the browser avoid a second cross-origin download.
+func downloadPlaygroundImageURLs(c *gin.Context, info *relaycommon.RelayInfo, responseBody []byte) []byte {
+	if info == nil || !info.IsPlayground {
+		return responseBody
+	}
+
+	for index := int64(0); index < gjson.GetBytes(responseBody, "data.#").Int(); index++ {
+		path := "data." + strconv.FormatInt(index, 10)
+		if gjson.GetBytes(responseBody, path+".b64_json").String() != "" {
+			continue
+		}
+
+		imageURL := gjson.GetBytes(responseBody, path+".url").String()
+		if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
+			continue
+		}
+
+		_, imageData, err := service.GetImageFromUrl(imageURL)
+		if err != nil {
+			logger.LogWarn(c, fmt.Sprintf("playground image URL download failed: %s: %v", common.MaskSensitiveInfo(imageURL), err))
+			continue
+		}
+
+		updated, err := sjson.SetBytes(responseBody, path+".b64_json", imageData)
+		if err != nil {
+			logger.LogWarn(c, fmt.Sprintf("playground image response conversion failed: %v", err))
+			continue
+		}
+		responseBody = updated
+	}
+
+	return responseBody
 }
 
 func writeOpenaiImageStreamDone(c *gin.Context) error {

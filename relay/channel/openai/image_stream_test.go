@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,9 +10,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -64,6 +69,37 @@ func TestOpenaiImageDoResponseUsesInfoIsStream(t *testing.T) {
 		require.Contains(t, recorder.Body.String(), `event: image_generation.completed`)
 		require.Contains(t, recorder.Body.String(), `data: [DONE]`)
 	})
+}
+
+func TestOpenaiImageHandlerDownloadsPlaygroundImageURLs(t *testing.T) {
+	oldMaxFileDownloadMB := constant.MaxFileDownloadMB
+	constant.MaxFileDownloadMB = 64
+	t.Cleanup(func() { constant.MaxFileDownloadMB = oldMaxFileDownloadMB })
+
+	oldFetchSetting := *system_setting.GetFetchSetting()
+	t.Cleanup(func() { *system_setting.GetFetchSetting() = oldFetchSetting })
+	system_setting.GetFetchSetting().EnableSSRFProtection = false
+	service.InitHttpClient()
+
+	imageBytes := []byte("test-image")
+	imageServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "image/png")
+		_, _ = writer.Write(imageBytes)
+	}))
+	t.Cleanup(imageServer.Close)
+
+	body := `{"created":1710000000,"data":[{"url":"` + imageServer.URL + `/image.png"}]}`
+	c, recorder, resp, info := newImageTestContext(t, body, "application/json", false)
+	info.IsPlayground = true
+
+	_, err := OpenaiImageHandler(c, info, resp)
+	require.Nil(t, err)
+
+	var response dto.ImageResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Data, 1)
+	require.Equal(t, imageServer.URL+"/image.png", response.Data[0].Url)
+	require.Equal(t, base64.StdEncoding.EncodeToString(imageBytes), response.Data[0].B64Json)
 }
 
 // TestOpenaiImageStreamHandlerForwardsSSEAndUsage covers the core SSE path:

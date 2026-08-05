@@ -1,0 +1,36 @@
+diff --git a/src/lib/devProxy.ts b/src/lib/devProxy.ts
+index 0000000..0000000 100644
+--- a/src/lib/devProxy.ts
++++ b/src/lib/devProxy.ts
+@@ -15,1 +15,2 @@ export function normalizeBaseUrl(baseUrl: string) {
+   if (!trimmed) return ''
++  if (trimmed.startsWith('/')) return trimmed.replace(/\/+$/, '')
+@@ -64,1 +64,2 @@ export function buildApiUrl(
+   const endpointPath = path.replace(/^\/+/, '')
++  if (normalizedBaseUrl === '/pg') return `${normalizedBaseUrl}/${endpointPath}`
+diff --git a/src/lib/devProxy.test.ts b/src/lib/devProxy.test.ts
+index 0000000..0000000 100644
+--- a/src/lib/devProxy.test.ts
++++ b/src/lib/devProxy.test.ts
+@@ -4,2 +4,14 @@ describe('buildApiUrl', () => {
+ describe('buildApiUrl', () => {
++  it('keeps hosted same-origin base paths relative', () => {
++    expect(buildApiUrl('/pg', 'images/generations', null, false)).toBe(
++      '/pg/images/generations',
++    )
++  })
++
++  it('keeps a versioned relative API base path intact', () => {
++    expect(buildApiUrl('/api/v1', 'responses', null, false)).toBe(
++      '/api/v1/responses',
++    )
++  })
++
+   it('uses the same-origin proxy prefix when API proxy is enabled', () => {
+diff --git a/public/sw.js b/public/sw.js
+index 48c9b9d..0000000 100644
+--- a/public/sw.js
++++ b/public/sw.js
+@@ -1,1 +1,1 @@
+-const CACHE_NAME = 'gpt-image-playground-v0.1.6'
++const CACHE_NAME = 'gpt-image-playground-v0.1.7'
