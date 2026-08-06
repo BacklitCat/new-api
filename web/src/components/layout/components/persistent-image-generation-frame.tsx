@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { LoadingState } from '@/components/loading-state'
 import { useTheme } from '@/context/theme-provider'
 import { getFreshAuthHeaders } from '@/lib/auth-session'
 import { cn } from '@/lib/utils'
@@ -40,11 +41,22 @@ export function PersistentImageGenerationFrame(
   const accessExpiresAt = useAuthStore((state) => state.auth.accessExpiresAt)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [mounted, setMounted] = useState(props.active)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Mount once on first visit, then keep in-flight generation alive across navigation.
     if (props.active) setMounted(true)
   }, [props.active])
+
+  useEffect(() => {
+    // Prefetch the playground bundle in the background so the first visit
+    // opens into an already-cached, fully styled app instead of a blank flash.
+    const link = document.createElement('link')
+    link.rel = 'prefetch'
+    link.href = '/image-playground/'
+    document.head.append(link)
+    return () => link.remove()
+  }, [])
 
   const syncIframeContext = useCallback(async () => {
     const target = iframeRef.current?.contentWindow
@@ -106,18 +118,29 @@ export function PersistentImageGenerationFrame(
     <Main
       aria-hidden={!props.active}
       className={cn(
-        'bg-background absolute inset-0 p-0',
+        'bg-background relative absolute inset-0 p-0',
         props.active ? 'visible' : 'pointer-events-none invisible'
       )}
     >
+      {!loaded && (
+        <div className='absolute inset-0'>
+          <LoadingState />
+        </div>
+      )}
       <iframe
         ref={iframeRef}
         title={t('Image Generation')}
         src='/image-playground/'
-        className='h-full min-h-0 w-full flex-1 border-0'
+        className={cn(
+          'h-full min-h-0 w-full flex-1 border-0 transition-opacity duration-300',
+          loaded ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
         allow='clipboard-read; clipboard-write'
         sandbox='allow-downloads allow-forms allow-modals allow-popups allow-same-origin allow-scripts'
-        onLoad={() => void syncIframeContext()}
+        onLoad={() => {
+          setLoaded(true)
+          void syncIframeContext()
+        }}
       />
     </Main>
   )

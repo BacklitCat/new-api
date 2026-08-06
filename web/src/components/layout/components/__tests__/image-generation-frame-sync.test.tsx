@@ -119,4 +119,29 @@ describe('persistent image generation frame synchronization', () => {
     useAuthStore.getState().auth.reset()
     container.remove()
   })
+
+  test('hides the unloaded iframe behind a themed loading placeholder', async () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<PersistentImageGenerationFrame active />)
+    })
+
+    const iframe = container.querySelector('iframe')
+    assert.ok(iframe)
+    assert.match(iframe.className, /opacity-0/)
+    assert.ok(container.querySelector('.animate-spin'))
+
+    await act(async () => {
+      iframe.dispatchEvent(new domWindow.Event('load') as unknown as Event)
+    })
+
+    assert.match(iframe.className, /opacity-100/)
+    assert.equal(container.querySelector('.animate-spin'), null)
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
 })
