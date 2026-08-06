@@ -27,5 +27,5 @@ func GetModelQuotaTypes(modelName string) []int {
 	if !ok {
 		return []int{}
 	}
-	return []int{quota}
+	return append([]int(nil), quota...)
 }

@@ -70,12 +70,27 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
-	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
-
 	groupRatioInfo := HandleGroupRatio(c, info)
+	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
+	groupPricing, hasGroupPricing := billing_setting.GetGroupModelPricing(info.UsingGroup, info.OriginModelName)
+	if hasGroupPricing {
+		switch groupPricing.BillingMode {
+		case billing_setting.BillingModePerRequest:
+			if groupPricing.ModelPrice == nil {
+				return types.PriceData{}, fmt.Errorf("group %s model %s per-request billing has no model price", info.UsingGroup, info.OriginModelName)
+			}
+			modelPrice = *groupPricing.ModelPrice
+			usePrice = true
+		case billing_setting.BillingModeRatio:
+			modelPrice = -1
+			usePrice = false
+		default:
+			return types.PriceData{}, fmt.Errorf("group %s model %s has unsupported billing mode %q", info.UsingGroup, info.OriginModelName, groupPricing.BillingMode)
+		}
+	}
 
 	// Check if this model uses tiered_expr billing
-	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeTieredExpr {
+	if !hasGroupPricing && billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeTieredExpr {
 		return modelPriceHelperTiered(c, info, promptTokens, meta, groupRatioInfo)
 	}
 
@@ -187,15 +202,34 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	groupRatioInfo := HandleGroupRatio(c, info)
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
+	groupPricing, hasGroupPricing := billing_setting.GetGroupModelPricing(info.UsingGroup, info.OriginModelName)
+	if hasGroupPricing {
+		switch groupPricing.BillingMode {
+		case billing_setting.BillingModePerRequest:
+			if groupPricing.ModelPrice == nil {
+				return types.PriceData{}, fmt.Errorf("group %s model %s per-request billing has no model price", info.UsingGroup, info.OriginModelName)
+			}
+			modelPrice = *groupPricing.ModelPrice
+			success = true
+		case billing_setting.BillingModeRatio:
+			modelPrice = -1
+			success = false
+		default:
+			return types.PriceData{}, fmt.Errorf("group %s model %s has unsupported billing mode %q", info.UsingGroup, info.OriginModelName, groupPricing.BillingMode)
+		}
+	}
 	usePrice := success
 	var modelRatio float64
 
 	if !success {
-		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
-		if ok {
-			modelPrice = defaultPrice
-			usePrice = true
-		} else {
+		if !hasGroupPricing {
+			defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
+			if ok {
+				modelPrice = defaultPrice
+				usePrice = true
+			}
+		}
+		if !usePrice {
 			var ratioSuccess bool
 			var matchName string
 			modelRatio, ratioSuccess, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
@@ -259,10 +293,10 @@ func HasModelBillingConfig(modelName string) bool {
 		return true
 	}
 	if billing_setting.GetBillingMode(modelName) != billing_setting.BillingModeTieredExpr {
-		return false
+		return billing_setting.HasGroupModelPricing(modelName)
 	}
 	expr, ok := billing_setting.GetBillingExpr(modelName)
-	return ok && strings.TrimSpace(expr) != ""
+	return (ok && strings.TrimSpace(expr) != "") || billing_setting.HasGroupModelPricing(modelName)
 }
 
 func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {

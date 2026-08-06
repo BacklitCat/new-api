@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"sync"
@@ -16,26 +17,36 @@ import (
 )
 
 type Pricing struct {
-	ModelName              string                  `json:"model_name"`
-	Description            string                  `json:"description,omitempty"`
-	Icon                   string                  `json:"icon,omitempty"`
-	Tags                   string                  `json:"tags,omitempty"`
-	VendorID               int                     `json:"vendor_id,omitempty"`
-	QuotaType              int                     `json:"quota_type"`
-	ModelRatio             float64                 `json:"model_ratio"`
-	ModelPrice             float64                 `json:"model_price"`
-	OwnerBy                string                  `json:"owner_by"`
-	CompletionRatio        float64                 `json:"completion_ratio"`
-	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
-	CreateCacheRatio       *float64                `json:"create_cache_ratio,omitempty"`
-	ImageRatio             *float64                `json:"image_ratio,omitempty"`
-	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
-	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
-	EnableGroup            []string                `json:"enable_groups"`
-	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
-	BillingMode            string                  `json:"billing_mode,omitempty"`
-	BillingExpr            string                  `json:"billing_expr,omitempty"`
-	PricingVersion         string                  `json:"pricing_version,omitempty"`
+	ModelName              string                         `json:"model_name"`
+	Description            string                         `json:"description,omitempty"`
+	Icon                   string                         `json:"icon,omitempty"`
+	Tags                   string                         `json:"tags,omitempty"`
+	VendorID               int                            `json:"vendor_id,omitempty"`
+	QuotaType              int                            `json:"quota_type"`
+	ModelRatio             float64                        `json:"model_ratio"`
+	ModelPrice             float64                        `json:"model_price"`
+	OwnerBy                string                         `json:"owner_by"`
+	CompletionRatio        float64                        `json:"completion_ratio"`
+	CacheRatio             *float64                       `json:"cache_ratio,omitempty"`
+	CreateCacheRatio       *float64                       `json:"create_cache_ratio,omitempty"`
+	ImageRatio             *float64                       `json:"image_ratio,omitempty"`
+	AudioRatio             *float64                       `json:"audio_ratio,omitempty"`
+	AudioCompletionRatio   *float64                       `json:"audio_completion_ratio,omitempty"`
+	EnableGroup            []string                       `json:"enable_groups"`
+	SupportedEndpointTypes []constant.EndpointType        `json:"supported_endpoint_types"`
+	BillingMode            string                         `json:"billing_mode,omitempty"`
+	BillingExpr            string                         `json:"billing_expr,omitempty"`
+	GroupPricing           map[string]GroupBillingPricing `json:"group_pricing,omitempty"`
+	QuotaTypes             []int                          `json:"quota_types,omitempty"`
+	PricingVersion         string                         `json:"pricing_version,omitempty"`
+}
+
+// GroupBillingPricing describes a group-specific billing override for the
+// public pricing catalog. The legacy model-wide fields remain authoritative
+// whenever a group has no override.
+type GroupBillingPricing struct {
+	QuotaType  int      `json:"quota_type"`
+	ModelPrice *float64 `json:"model_price,omitempty"`
 }
 
 type PricingVendor struct {
@@ -54,7 +65,7 @@ var (
 
 	// 缓存映射：模型名 -> 启用分组 / 计费类型
 	modelEnableGroups     = make(map[string][]string)
-	modelQuotaTypeMap     = make(map[string]int)
+	modelQuotaTypeMap     = make(map[string][]int)
 	modelEnableGroupsLock = sync.RWMutex{}
 )
 
@@ -406,6 +417,40 @@ func updatePricing() {
 				pricing.BillingExpr = expr
 			}
 		}
+
+		quotaTypes := map[int]struct{}{pricing.QuotaType: {}}
+		for _, group := range groups.Items() {
+			rule, ok := billing_setting.GetGroupModelPricing(group, model)
+			if !ok {
+				continue
+			}
+			if pricing.GroupPricing == nil {
+				pricing.GroupPricing = make(map[string]GroupBillingPricing)
+			}
+			groupPricing := GroupBillingPricing{}
+			switch rule.BillingMode {
+			case billing_setting.BillingModePerRequest:
+				if rule.ModelPrice == nil {
+					continue
+				}
+				groupPricing.QuotaType = 1
+				price := *rule.ModelPrice
+				groupPricing.ModelPrice = &price
+			case billing_setting.BillingModeRatio:
+				groupPricing.QuotaType = 0
+			default:
+				continue
+			}
+			pricing.GroupPricing[group] = groupPricing
+			quotaTypes[groupPricing.QuotaType] = struct{}{}
+		}
+		for quotaType := range quotaTypes {
+			pricing.QuotaTypes = append(pricing.QuotaTypes, quotaType)
+		}
+		sort.Ints(pricing.QuotaTypes)
+		if len(pricing.QuotaTypes) == 1 {
+			pricing.QuotaTypes = nil
+		}
 		pricingMap = append(pricingMap, pricing)
 	}
 
@@ -417,10 +462,14 @@ func updatePricing() {
 	// 刷新缓存映射，供高并发快速查询
 	modelEnableGroupsLock.Lock()
 	modelEnableGroups = make(map[string][]string)
-	modelQuotaTypeMap = make(map[string]int)
+	modelQuotaTypeMap = make(map[string][]int)
 	for _, p := range pricingMap {
 		modelEnableGroups[p.ModelName] = p.EnableGroup
-		modelQuotaTypeMap[p.ModelName] = p.QuotaType
+		quotaTypes := p.QuotaTypes
+		if len(quotaTypes) == 0 {
+			quotaTypes = []int{p.QuotaType}
+		}
+		modelQuotaTypeMap[p.ModelName] = append([]int(nil), quotaTypes...)
 	}
 	modelEnableGroupsLock.Unlock()
 

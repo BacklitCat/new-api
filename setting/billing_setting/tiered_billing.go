@@ -6,26 +6,31 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
 )
 
 const (
-	BillingModeRatio      = "ratio"
-	BillingModeTieredExpr = "tiered_expr"
-	BillingModeField      = "billing_mode"
-	BillingExprField      = "billing_expr"
+	BillingModeRatio       = "ratio"
+	BillingModePerRequest  = "per-request"
+	BillingModeTieredExpr  = "tiered_expr"
+	BillingModeField       = "billing_mode"
+	BillingExprField       = "billing_expr"
 )
 
 // BillingSetting is managed by config.GlobalConfig.Register.
-// DB keys: billing_setting.billing_mode, billing_setting.billing_expr
+// DB keys: billing_setting.billing_mode, billing_setting.billing_expr,
+// billing_setting.group_model_pricing
 type BillingSetting struct {
-	BillingMode map[string]string `json:"billing_mode"`
-	BillingExpr map[string]string `json:"billing_expr"`
+	BillingMode       map[string]string                                      `json:"billing_mode"`
+	BillingExpr       map[string]string                                      `json:"billing_expr"`
+	GroupModelPricing *types.RWMap[string, map[string]GroupModelPricingRule] `json:"group_model_pricing"`
 }
 
 var billingSetting = BillingSetting{
-	BillingMode: make(map[string]string),
-	BillingExpr: make(map[string]string),
+	BillingMode:       make(map[string]string),
+	BillingExpr:       make(map[string]string),
+	GroupModelPricing: types.NewRWMap[string, map[string]GroupModelPricingRule](),
 }
 
 func init() {

@@ -7,6 +7,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,13 +49,65 @@ func insertPricingEndpointChannel(t *testing.T, channelID int, channelType int, 
 }
 
 func insertPricingEndpointAbility(t *testing.T, channelID int, modelName string) {
+	insertPricingEndpointAbilityWithGroup(t, channelID, modelName, "default")
+}
+
+func insertPricingEndpointAbilityWithGroup(t *testing.T, channelID int, modelName, group string) {
 	t.Helper()
 	require.NoError(t, DB.Create(&Ability{
-		Group:     "default",
+		Group:     group,
 		Model:     modelName,
 		ChannelId: channelID,
 		Enabled:   true,
 	}).Error)
+}
+
+func TestPricingExposesGroupSpecificBilling(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+
+	savedConfig := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		savedConfig[key] = value
+		return nil
+	}))
+	savedModelPrices := ratio_setting.ModelPrice2JSONString()
+	savedModelRatios := ratio_setting.ModelRatio2JSONString()
+	savedGroupRatios := ratio_setting.GroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(savedConfig))
+		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedModelPrices))
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedModelRatios))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(savedGroupRatios))
+	})
+
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{}`))
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"image-2":10}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"per-request":1,"per-token":1}`))
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.group_model_pricing": `{"per-request":{"image-2":{"billing_mode":"per-request","model_price":0.2}},"per-token":{"image-2":{"billing_mode":"ratio"}}}`,
+	}))
+
+	insertPricingEndpointChannel(t, 501, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	insertPricingEndpointChannel(t, 502, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	insertPricingEndpointAbilityWithGroup(t, 501, "image-2", "per-request")
+	insertPricingEndpointAbilityWithGroup(t, 502, "image-2", "per-token")
+
+	var pricing Pricing
+	for _, item := range GetPricing() {
+		if item.ModelName == "image-2" {
+			pricing = item
+			break
+		}
+	}
+	require.Equal(t, "image-2", pricing.ModelName)
+	assert.Equal(t, 0, pricing.QuotaType)
+	require.Contains(t, pricing.GroupPricing, "per-request")
+	require.Contains(t, pricing.GroupPricing, "per-token")
+	assert.Equal(t, 1, pricing.GroupPricing["per-request"].QuotaType)
+	require.NotNil(t, pricing.GroupPricing["per-request"].ModelPrice)
+	assert.Equal(t, 0.2, *pricing.GroupPricing["per-request"].ModelPrice)
+	assert.Equal(t, 0, pricing.GroupPricing["per-token"].QuotaType)
+	assert.Equal(t, []int{0, 1}, pricing.QuotaTypes)
 }
 
 func pricingEndpointAdvancedCustomConfig(routes ...dto.AdvancedCustomRoute) dto.ChannelOtherSettings {

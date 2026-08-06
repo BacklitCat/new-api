@@ -265,6 +265,9 @@ func enrichModels(models []*model.Model) {
 				quotaSetByIdx[idx] = qs
 			}
 			qs[p.QuotaType] = struct{}{}
+			for _, quotaType := range p.QuotaTypes {
+				qs[quotaType] = struct{}{}
+			}
 		}
 	}
 
