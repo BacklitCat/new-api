@@ -27,6 +27,11 @@ export type PricingVendor = {
   description?: string
 }
 
+export type GroupBillingPricing = {
+  quota_type: number
+  model_price?: number
+}
+
 export type PricingModel = {
   id: number
   model_name: string
@@ -54,6 +59,10 @@ export type PricingModel = {
   billing_mode?: string
   /** Raw expression describing dynamic / tiered billing */
   billing_expr?: string
+  /** Group-specific billing overrides; absent groups use the legacy model-wide pricing. */
+  group_pricing?: Record<string, GroupBillingPricing>
+  /** Distinct billing types exposed when a model mixes group-specific modes. */
+  quota_types?: number[]
   /** Pricing version returned by backend, useful for cache busting */
   pricing_version?: string
   /**

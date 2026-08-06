@@ -54,7 +54,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const priceRate = props.priceRate ?? 1
   const usdExchangeRate = props.usdExchangeRate ?? 1
   const showRechargePrice = props.showRechargePrice ?? false
-  const isTokenBased = isTokenBasedModel(props.model)
+  const isTokenBased = isTokenBasedModel(props.model, props.selectedGroup)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -64,7 +64,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
   const isDynamicPricing =
     props.model.billing_mode === 'tiered_expr' &&
-    Boolean(props.model.billing_expr)
+    Boolean(props.model.billing_expr) &&
+    !props.model.group_pricing?.[props.selectedGroup || '']
   const hasCachedPrice = isTokenBased && props.model.cache_ratio != null
   const dynamicSummary = isDynamicPricing
     ? getDynamicPricingSummary(props.model, {
@@ -76,6 +77,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           props.model,
           props.selectedGroup
         ),
+        selectedGroup: props.selectedGroup,
       })
     : null
 
@@ -253,7 +255,10 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               {primaryGroup}
             </span>
           )}
-          <ModelBillingModeBadge model={props.model} />
+          <ModelBillingModeBadge
+            model={props.model}
+            selectedGroup={props.selectedGroup}
+          />
         </div>
         <ModelPerfBadge perf={props.perf} className='row-span-2 self-start' />
 

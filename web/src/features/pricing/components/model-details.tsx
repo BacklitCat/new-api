@@ -67,7 +67,11 @@ import {
   isDynamicPricingModel,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
-import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
+import {
+  getAvailableGroups,
+  getConfiguredGroupRatio,
+  isTokenBasedModel,
+} from '../lib/model-helpers'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
 import type {
   ModelCapability,
@@ -868,6 +872,14 @@ function GroupPricingSection(props: {
   )
 
   const isTokenBased = isTokenBasedModel(props.model)
+  const groupBillingTypes = availableGroups.map(
+    (group) =>
+      isTokenBasedModel(props.model, group) ||
+      isDynamicPricingModel(props.model, group)
+  )
+  const hasTokenGroups = groupBillingTypes.some(Boolean)
+  const hasRequestGroups = groupBillingTypes.some((isToken) => !isToken)
+  const hasMixedBilling = hasTokenGroups && hasRequestGroups
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
 
   const extraPriceTypes = useMemo(() => {
@@ -910,7 +922,10 @@ function GroupPricingSection(props: {
   const thClass =
     'text-muted-foreground py-2 text-[10px] font-medium tracking-wider uppercase'
 
-  if (isDynamicPricingModel(props.model)) {
+  if (
+    isDynamicPricingModel(props.model) &&
+    Object.keys(props.model.group_pricing || {}).length === 0
+  ) {
     const dynamicTiers = getDynamicPricingTiers(props.model)
 
     if (dynamicTiers.length === 0) {
@@ -949,7 +964,7 @@ function GroupPricingSection(props: {
     })
     const formattedPricesByGroup = new Map(
       availableGroups.map((group) => {
-        const ratio = props.groupRatio[group] || 1
+        const ratio = getConfiguredGroupRatio(props.groupRatio, group)
         return [
           group,
           getDynamicFormattedPricesByTier(dynamicTiers, {
@@ -969,7 +984,7 @@ function GroupPricingSection(props: {
         <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
         <div className='space-y-3'>
           {availableGroups.map((group) => {
-            const ratio = props.groupRatio[group] || 1
+            const ratio = getConfiguredGroupRatio(props.groupRatio, group)
             const formattedPricesByTier =
               formattedPricesByGroup.get(group) ??
               new Map<DynamicPricingTier, Map<string, string>>()
@@ -1021,8 +1036,33 @@ function GroupPricingSection(props: {
     )
   }
 
-  const renderGroupPrice = (group: string, type: PriceType) =>
-    formatGroupPrice(
+  const dynamicFieldByPriceType: Record<PriceType, string> = {
+    input: 'inputPrice',
+    output: 'outputPrice',
+    cache: 'cacheReadPrice',
+    create_cache: 'cacheCreatePrice',
+    image: 'imagePrice',
+    audio_input: 'audioInputPrice',
+    audio_output: 'audioOutputPrice',
+  }
+  const renderGroupPrice = (group: string, type: PriceType) => {
+    if (isDynamicPricingModel(props.model, group)) {
+      const summary = getDynamicPricingSummary(props.model, {
+        tokenUnit: props.tokenUnit,
+        showRechargePrice,
+        priceRate: props.priceRate,
+        usdExchangeRate: props.usdExchangeRate,
+        groupRatioMultiplier: getConfiguredGroupRatio(props.groupRatio, group),
+        selectedGroup: group,
+      })
+      return (
+        summary?.entries.find(
+          (entry) => entry.field === dynamicFieldByPriceType[type]
+        )?.formatted ?? '-'
+      )
+    }
+
+    return formatGroupPrice(
       props.model,
       group,
       type,
@@ -1032,15 +1072,59 @@ function GroupPricingSection(props: {
       props.usdExchangeRate,
       props.groupRatio
     )
+  }
   const renderFixedGroupPrice = (group: string) =>
-    formatFixedPrice(
-      props.model,
-      group,
-      showRechargePrice,
-      props.priceRate,
-      props.usdExchangeRate,
-      props.groupRatio
-    )
+    isDynamicPricingModel(props.model, group)
+      ? '-'
+      : formatFixedPrice(
+          props.model,
+          group,
+          showRechargePrice,
+          props.priceRate,
+          props.usdExchangeRate,
+          props.groupRatio
+        )
+
+  const tokenPricingColumns = [
+    {
+      id: 'input',
+      header: t('Input'),
+      className: `${thClass} text-right`,
+      cellClassName: 'py-2.5 text-right font-mono',
+      cell: (group: string) => renderGroupPrice(group, 'input'),
+    },
+    {
+      id: 'output',
+      header: t('Output'),
+      className: `${thClass} text-right`,
+      cellClassName: 'py-2.5 text-right font-mono',
+      cell: (group: string) => renderGroupPrice(group, 'output'),
+    },
+    ...extraPriceTypes.map((ep) => ({
+      id: ep.type,
+      header: ep.label,
+      className: `${thClass} text-right`,
+      cellClassName: 'py-2.5 text-right font-mono',
+      cell: (group: string) => renderGroupPrice(group, ep.type),
+    })),
+  ]
+  const fixedPricingColumns = [
+    {
+      id: 'price',
+      header: t('Price'),
+      className: `${thClass} text-right`,
+      cellClassName: 'py-2.5 text-right font-mono',
+      cell: renderFixedGroupPrice,
+    },
+  ]
+  const mixedPricingColumns = [...fixedPricingColumns, ...tokenPricingColumns]
+  let pricingColumns = fixedPricingColumns
+  if (isTokenBased) {
+    pricingColumns = tokenPricingColumns
+  }
+  if (hasMixedBilling) {
+    pricingColumns = mixedPricingColumns
+  }
 
   return (
     <section>
@@ -1065,45 +1149,14 @@ function GroupPricingSection(props: {
             header: t('Ratio'),
             className: thClass,
             cellClassName: 'text-muted-foreground py-2.5 font-mono',
-            cell: (group) => `${props.groupRatio[group] || 1}x`,
+            cell: (group) =>
+              `${getConfiguredGroupRatio(props.groupRatio, group)}x`,
           },
-          ...(isTokenBased
-            ? [
-                {
-                  id: 'input',
-                  header: t('Input'),
-                  className: `${thClass} text-right`,
-                  cellClassName: 'py-2.5 text-right font-mono',
-                  cell: (group: string) => renderGroupPrice(group, 'input'),
-                },
-                {
-                  id: 'output',
-                  header: t('Output'),
-                  className: `${thClass} text-right`,
-                  cellClassName: 'py-2.5 text-right font-mono',
-                  cell: (group: string) => renderGroupPrice(group, 'output'),
-                },
-                ...extraPriceTypes.map((ep) => ({
-                  id: ep.type,
-                  header: ep.label,
-                  className: `${thClass} text-right`,
-                  cellClassName: 'py-2.5 text-right font-mono',
-                  cell: (group: string) => renderGroupPrice(group, ep.type),
-                })),
-              ]
-            : [
-                {
-                  id: 'price',
-                  header: t('Price'),
-                  className: `${thClass} text-right`,
-                  cellClassName: 'py-2.5 text-right font-mono',
-                  cell: renderFixedGroupPrice,
-                },
-              ]),
+          ...pricingColumns,
         ]}
       />
       <div className='-mx-4 sm:mx-0'>
-        {isTokenBased && (
+        {hasTokenGroups && (
           <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
             {t('Prices shown per')} {tokenUnitLabel} tokens
           </p>

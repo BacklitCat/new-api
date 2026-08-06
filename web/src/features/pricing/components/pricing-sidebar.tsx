@@ -34,6 +34,7 @@ import {
   ENDPOINT_TYPES,
   FILTER_ALL,
   QUOTA_TYPES,
+  QUOTA_TYPE_VALUES,
   getEndpointTypeLabels,
   getQuotaTypeLabels,
 } from '../constants'
@@ -201,12 +202,22 @@ export function PricingSidebar(props: PricingSidebarProps) {
     {
       value: QUOTA_TYPES.TOKEN,
       label: quotaTypeLabels[QUOTA_TYPES.TOKEN],
-      count: countBy(props.models, (model) => model.quota_type === 0),
+      count: countBy(
+        props.models,
+        (model) =>
+          model.quota_type === QUOTA_TYPE_VALUES.TOKEN ||
+          model.quota_types?.includes(QUOTA_TYPE_VALUES.TOKEN) === true
+      ),
     },
     {
       value: QUOTA_TYPES.REQUEST,
       label: quotaTypeLabels[QUOTA_TYPES.REQUEST],
-      count: countBy(props.models, (model) => model.quota_type === 1),
+      count: countBy(
+        props.models,
+        (model) =>
+          model.quota_type === QUOTA_TYPE_VALUES.REQUEST ||
+          model.quota_types?.includes(QUOTA_TYPE_VALUES.REQUEST) === true
+      ),
     },
   ]
 

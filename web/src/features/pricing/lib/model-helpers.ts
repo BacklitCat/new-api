@@ -104,6 +104,50 @@ export function replaceModelInPath(path: string, modelName: string): string {
 /**
  * Check if model is token-based pricing
  */
-export function isTokenBasedModel(model: PricingModel): boolean {
-  return model.quota_type === QUOTA_TYPE_VALUES.TOKEN
+export function isTokenBasedModel(
+  model: PricingModel,
+  selectedGroup?: string
+): boolean {
+  return isTokenBasedModelForGroup(model, selectedGroup)
+}
+
+export type EffectiveBilling = {
+  quotaType: number
+  modelPrice?: number
+}
+
+export function getEffectiveBilling(
+  model: PricingModel,
+  selectedGroup?: string
+): EffectiveBilling {
+  if (
+    selectedGroup &&
+    selectedGroup !== FILTER_ALL &&
+    model.group_pricing?.[selectedGroup]
+  ) {
+    const groupPricing = model.group_pricing[selectedGroup]
+    return {
+      quotaType: groupPricing.quota_type,
+      modelPrice: groupPricing.model_price,
+    }
+  }
+
+  return {
+    quotaType: model.quota_type,
+    modelPrice: model.model_price,
+  }
+}
+
+export function isTokenBasedModelForGroup(
+  model: PricingModel,
+  selectedGroup?: string
+): boolean {
+  return (
+    getEffectiveBilling(model, selectedGroup).quotaType ===
+    QUOTA_TYPE_VALUES.TOKEN
+  )
+}
+
+export function isMixedBillingModel(model: PricingModel): boolean {
+  return (model.quota_types?.length ?? 0) > 1
 }

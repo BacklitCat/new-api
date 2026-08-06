@@ -20,7 +20,11 @@ import { formatCurrencyFromUSD } from '@/lib/currency'
 
 import { QUOTA_TYPE_VALUES, TOKEN_UNIT_DIVISORS } from '../constants'
 import type { PricingModel, TokenUnit, PriceType } from '../types'
-import { getConfiguredGroupRatio, getDisplayGroupRatio } from './model-helpers'
+import {
+  getConfiguredGroupRatio,
+  getDisplayGroupRatio,
+  getEffectiveBilling,
+} from './model-helpers'
 
 // ----------------------------------------------------------------------------
 // Price Calculation Utilities
@@ -150,7 +154,8 @@ export function formatPrice(
   usdExchangeRate = 1,
   selectedGroup?: string
 ): string {
-  if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
+  const billing = getEffectiveBilling(model, selectedGroup)
+  if (billing.quotaType === QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
   }
 
@@ -185,7 +190,8 @@ export function formatGroupPrice(
   usdExchangeRate = 1,
   groupRatio: Record<string, number>
 ): string {
-  if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
+  const billing = getEffectiveBilling(model, group)
+  if (billing.quotaType === QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
   }
 
@@ -218,12 +224,13 @@ export function formatFixedPrice(
   usdExchangeRate = 1,
   groupRatio: Record<string, number>
 ): string {
-  if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
+  const billing = getEffectiveBilling(model, group)
+  if (billing.quotaType !== QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
   }
 
   const ratio = getConfiguredGroupRatio(groupRatio, group)
-  let priceInUSD = (model.model_price || 0) * ratio
+  let priceInUSD = (billing.modelPrice || 0) * ratio
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
@@ -249,13 +256,14 @@ export function formatRequestPrice(
   usdExchangeRate = 1,
   selectedGroup?: string
 ): string {
-  if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
+  const billing = getEffectiveBilling(model, selectedGroup)
+  if (billing.quotaType !== QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
   }
 
   const displayGroupRatio = getDisplayGroupRatio(model, selectedGroup)
 
-  let priceInUSD = (model.model_price || 0) * displayGroupRatio
+  let priceInUSD = (billing.modelPrice || 0) * displayGroupRatio
 
   priceInUSD = applyRechargeRate(
     priceInUSD,

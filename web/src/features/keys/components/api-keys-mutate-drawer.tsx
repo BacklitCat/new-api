@@ -76,6 +76,7 @@ import {
   transformFormDataToPayload,
   transformApiKeyToFormDefaults,
 } from '../lib'
+import { getGroupPerRequestLabel } from '../lib/group-billing'
 import type { ApiKey } from '../types'
 import {
   ApiKeyGroupCombobox,
@@ -126,6 +127,7 @@ export function ApiKeysMutateDrawer({
       label: key,
       desc: info.desc || key,
       ratio: info.ratio,
+      billingLabel: getGroupPerRequestLabel(info, t('Per-request')),
     })
   )
   const backendHasAuto = groups.some((g) => g.value === 'auto')

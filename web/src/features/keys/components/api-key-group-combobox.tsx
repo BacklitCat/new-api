@@ -42,6 +42,7 @@ export type ApiKeyGroupOption = {
   label: string
   desc?: string
   ratio?: number | string
+  billingLabel?: string
 }
 
 type ApiKeyGroupComboboxProps = {
@@ -96,6 +97,19 @@ function GroupRatioBadge({ ratio }: { ratio: ApiKeyGroupOption['ratio'] }) {
   )
 }
 
+function GroupBillingBadge({ label }: { label?: string }) {
+  if (!label) return null
+
+  return (
+    <Badge
+      variant='outline'
+      className='max-w-36 shrink-0 truncate border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700 sm:max-w-none sm:text-xs dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
+    >
+      {label}
+    </Badge>
+  )
+}
+
 export function ApiKeyGroupCombobox({
   options,
   value,
@@ -114,11 +128,13 @@ export function ApiKeyGroupCombobox({
 
     return options.filter((option) => {
       const ratioText = String(option.ratio ?? '').toLowerCase()
+      const billingText = option.billingLabel?.toLowerCase() ?? ''
       return (
         option.value.toLowerCase().includes(search) ||
         option.label.toLowerCase().includes(search) ||
         option.desc?.toLowerCase().includes(search) ||
-        ratioText.includes(search)
+        ratioText.includes(search) ||
+        billingText.includes(search)
       )
     })
   }, [options, searchValue])
@@ -155,7 +171,11 @@ export function ApiKeyGroupCombobox({
             )}
           </span>
           <span className='hidden sm:block'>
-            <GroupRatioBadge ratio={selectedOption?.ratio} />
+            {selectedOption?.billingLabel ? (
+              <GroupBillingBadge label={selectedOption.billingLabel} />
+            ) : (
+              <GroupRatioBadge ratio={selectedOption?.ratio} />
+            )}
           </span>
         </span>
         <ChevronsUpDown className='h-4 w-4 shrink-0 opacity-50' />
@@ -198,7 +218,11 @@ export function ApiKeyGroupCombobox({
                       </span>
                     )}
                   </span>
-                  <GroupRatioBadge ratio={option.ratio} />
+                  {option.billingLabel ? (
+                    <GroupBillingBadge label={option.billingLabel} />
+                  ) : (
+                    <GroupRatioBadge ratio={option.ratio} />
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>

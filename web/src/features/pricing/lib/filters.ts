@@ -82,7 +82,9 @@ export function filterByQuotaType(
     quotaType === QUOTA_TYPES.TOKEN
       ? QUOTA_TYPE_VALUES.TOKEN
       : QUOTA_TYPE_VALUES.REQUEST
-  return models.filter((m) => m.quota_type === targetType)
+  return models.filter(
+    (m) => m.quota_type === targetType || m.quota_types?.includes(targetType)
+  )
 }
 
 /**
@@ -183,7 +185,7 @@ export function extractAllTags(models: PricingModel[]): string[] {
     }
   })
 
-  return Array.from(tagSet).sort((a, b) => a.localeCompare(b))
+  return [...tagSet].sort((a, b) => a.localeCompare(b))
 }
 
 /**

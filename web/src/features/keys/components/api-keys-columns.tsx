@@ -31,12 +31,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { toIntlLocale } from '@/i18n/languages'
-import { getUserGroups } from '@/lib/api'
+import { getUserGroups, type UserGroupInfo } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { API_KEY_STATUSES } from '../constants'
+import { getGroupPerRequestLabel } from '../lib/group-billing'
 import type { ApiKey } from '../types'
 import { ApiKeyTimestampCell } from './api-key-timestamp-cell'
 import {
@@ -53,20 +54,14 @@ function getQuotaProgressColor(percentage: number): string {
   return '[&_[data-slot=progress-indicator]]:bg-emerald-500'
 }
 
-function useGroupRatios(): Record<string, number> {
+function useUserGroups(): Record<string, UserGroupInfo> {
   const { data } = useQuery({
     queryKey: ['user-groups'],
     queryFn: getUserGroups,
     staleTime: 0,
     select: (res) => {
       if (!res.success || !res.data) return {}
-      const ratios: Record<string, number> = {}
-      for (const [group, info] of Object.entries(res.data)) {
-        if (typeof info.ratio === 'number') {
-          ratios[group] = info.ratio
-        }
-      }
-      return ratios
+      return res.data
     },
   })
 
@@ -75,7 +70,7 @@ function useGroupRatios(): Record<string, number> {
 
 export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
   const { t, i18n } = useTranslation()
-  const groupRatios = useGroupRatios()
+  const userGroups = useUserGroups()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const justNowLabel = t('Just now')
   const staleAccessThreshold = dayjs(now).subtract(3, 'month').valueOf()
@@ -195,7 +190,14 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       cell: ({ row }) => {
         const apiKey = row.original
         const group = row.getValue('group') as string
-        const ratio = group && group !== 'auto' ? groupRatios[group] : undefined
+        const groupInfo =
+          group && group !== 'auto' ? userGroups[group] : undefined
+        const ratio =
+          typeof groupInfo?.ratio === 'number' ? groupInfo.ratio : undefined
+        const billingLabel = getGroupPerRequestLabel(
+          groupInfo,
+          t('Per-request')
+        )
 
         if (group === 'auto') {
           return (
@@ -225,10 +227,16 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         return (
           <TruncatedCell
             className='-ml-1.5'
-            tooltipContent={group || '-'}
+            tooltipContent={
+              billingLabel ? `${group} · ${billingLabel}` : group || '-'
+            }
             tooltipClassName='break-all'
           >
-            <GroupBadge group={group} ratio={ratio} />
+            <GroupBadge
+              group={group}
+              ratio={billingLabel ? undefined : ratio}
+              billingLabel={billingLabel}
+            />
           </TruncatedCell>
         )
       },

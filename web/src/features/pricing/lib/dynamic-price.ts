@@ -36,6 +36,7 @@ type DynamicPriceOptions = {
   priceRate?: number
   usdExchangeRate?: number
   groupRatioMultiplier?: number
+  selectedGroup?: string
 }
 
 export type DynamicPriceEntry = {
@@ -62,7 +63,11 @@ export type DynamicPricingSummary = {
 
 const PRIMARY_DYNAMIC_FIELDS = new Set(['inputPrice', 'outputPrice'])
 
-export function isDynamicPricingModel(model: PricingModel): boolean {
+export function isDynamicPricingModel(
+  model: PricingModel,
+  selectedGroup?: string
+): boolean {
+  if (selectedGroup && model.group_pricing?.[selectedGroup]) return false
   return model.billing_mode === 'tiered_expr' && Boolean(model.billing_expr)
 }
 
@@ -107,16 +112,22 @@ export function formatDynamicUnitPrice(
   })
 }
 
-export function getDynamicPricingTiers(model: PricingModel): ParsedTier[] {
-  if (!isDynamicPricingModel(model)) return []
+export function getDynamicPricingTiers(
+  model: PricingModel,
+  selectedGroup?: string
+): ParsedTier[] {
+  if (!isDynamicPricingModel(model, selectedGroup)) return []
   const { billingExpr } = splitBillingExprAndRequestRules(
     model.billing_expr || ''
   )
   return parseTiersFromExpr(billingExpr)
 }
 
-export function hasDynamicRequestRules(model: PricingModel): boolean {
-  if (!isDynamicPricingModel(model)) return false
+export function hasDynamicRequestRules(
+  model: PricingModel,
+  selectedGroup?: string
+): boolean {
+  if (!isDynamicPricingModel(model, selectedGroup)) return false
   const { requestRuleExpr } = splitBillingExprAndRequestRules(
     model.billing_expr || ''
   )
@@ -157,9 +168,9 @@ export function getDynamicPricingSummary(
   model: PricingModel,
   options: DynamicPriceOptions
 ): DynamicPricingSummary | null {
-  if (!isDynamicPricingModel(model)) return null
+  if (!isDynamicPricingModel(model, options.selectedGroup)) return null
 
-  const tiers = getDynamicPricingTiers(model)
+  const tiers = getDynamicPricingTiers(model, options.selectedGroup)
   const tier = tiers[0] || null
   const entries = getDynamicPriceEntries(tier, options)
   const rawExpression = model.billing_expr || ''
@@ -168,7 +179,7 @@ export function getDynamicPricingSummary(
     tiers,
     tier,
     tierCount: tiers.length,
-    hasRequestRules: hasDynamicRequestRules(model),
+    hasRequestRules: hasDynamicRequestRules(model, options.selectedGroup),
     isSpecialExpression: rawExpression.trim().length > 0 && tiers.length === 0,
     rawExpression,
     entries,

@@ -67,6 +67,7 @@ type GroupFormValues = {
   TopupGroupRatio: string
   UserUsableGroups: string
   GroupGroupRatio: string
+  GroupModelPricing: string
   AutoGroups: string
   DefaultUseAutoGroup: boolean
   GroupSpecialUsableGroup: string
@@ -181,6 +182,32 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               onChange={(value) =>
                 handleFieldChange('GroupSpecialUsableGroup', value)
               }
+            />
+
+            <FormField
+              control={form.control}
+              name='GroupModelPricing'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Group model billing overrides')}</FormLabel>
+                  <FormControl>
+                    <JsonCodeEditor
+                      value={field.value}
+                      onChange={field.onChange}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      textareaRef={field.ref}
+                      heightClassName='h-48 min-h-48 max-h-48'
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Override billing for a model in one token group. Use billing_mode ratio for token billing or per-request with model_price in USD.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
 
             <FormField
@@ -306,6 +333,32 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                     {`{ targetGroup: ratio }`}{' '}
                     {t(
                       'to override billing when a user in one group uses a token of another group.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='GroupModelPricing'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Group model billing overrides')}</FormLabel>
+                  <FormControl>
+                    <JsonCodeEditor
+                      value={field.value}
+                      onChange={field.onChange}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      textareaRef={field.ref}
+                      heightClassName='h-48 min-h-48 max-h-48'
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'JSON map: billing group → model → { billing_mode: ratio | per-request, model_price: USD per request }.'
                     )}
                   </FormDescription>
                   <FormMessage />
@@ -499,7 +552,7 @@ function GroupPricingGuide({ open, onOpenChange }: GroupPricingGuideProps) {
                   {t('Charge.')}
                 </span>{' '}
                 {t(
-                  'Cost = model price × that one ratio. Nothing else from the group settings enters the formula.'
+                  'If a group model billing override exists, use its mode and price. Otherwise, cost = model price × that one ratio.'
                 )}
               </li>
             </ol>

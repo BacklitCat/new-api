@@ -54,10 +54,17 @@ export async function getUserModels(): Promise<{
   return res.data
 }
 
+export type UserGroupInfo = {
+  desc: string
+  ratio: number | string
+  /** Configured per-request prices in USD, keyed by model name. */
+  per_request_prices?: Record<string, number>
+}
+
 export async function getUserGroups(): Promise<{
   success: boolean
   message?: string
-  data?: Record<string, { desc: string; ratio: number | string }>
+  data?: Record<string, UserGroupInfo>
 }> {
   const res = await api.get('/api/user/self/groups')
   return res.data
