@@ -1,6 +1,6 @@
-From 5326caf30f3e6ec2a69f9d93a0b65d06aaf6733f Mon Sep 17 00:00:00 2001
+From 36f56eb840f2a7d5832a07ac1d25cf790db66d19 Mon Sep 17 00:00:00 2001
 From: pg <pg@local>
-Date: Wed, 7 Oct 2026 16:53:35 +0800
+Date: Wed, 7 Oct 2026 17:32:43 +0800
 Subject: [PATCH 4/7] feat: replace the hosted API settings panel
 
 ---
@@ -8,7 +8,7 @@ Subject: [PATCH 4/7] feat: replace the hosted API settings panel
  1 file changed, 54 insertions(+), 12 deletions(-)
 
 diff --git a/src/components/SettingsModal.tsx b/src/components/SettingsModal.tsx
-index 366410f..e10fc7b 100644
+index 366410f..e14f177 100644
 --- a/src/components/SettingsModal.tsx
 +++ b/src/components/SettingsModal.tsx
 @@ -4,6 +4,7 @@ import { normalizeBaseUrl } from '../lib/api'
@@ -114,7 +114,7 @@ index 366410f..e10fc7b 100644
 +                  label="图像模型"
 +                  value={activeProfile.model}
 +                  placeholder={DEFAULT_IMAGES_MODEL}
-+                  hint="多个模型以逗号分隔，可在首页的模型参数中切换；Agent 模式出图同样使用这里的模型。"
++                  hint="候选为当前令牌可用的模型，也可以手动填写；首页输入框左下角可直接切换，Agent 模式出图同样使用这里的模型。"
 +                  onCommit={commitHostedImageModel}
 +                />
 +              </div>

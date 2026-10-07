@@ -43,22 +43,27 @@ rename and refactor files constantly, but these contracts do not change.
    as a key. `0` or an absent field means "use the signed-in account's default
    group and quota". The option list comes from the dashboard-authenticated
    `/api/playground/image/tokens`, is filtered to enabled tokens, and is
-   refreshed whenever the dropdown opens. The selection lives in the hosted
-   context snapshot, so the header selector and the settings panel stay in sync.
+   refreshed whenever the dropdown opens; each option also carries the token's
+   group so the model list can be scoped to it. The selection lives in the
+   hosted context snapshot, so the header selector and the settings panel stay in
+   sync.
    → `src/components/NewApiHostedTokenSelect.tsx`, `withNewApiHostedToken()`,
    `appendNewApiHostedToken()`
 5. **Hosted mode is zero-config, and the user only chooses a token and a
    model.** An empty API URL and API key are valid: the default OpenAI profile
    uses `baseUrl: '/pg'`, and Agent mode receives a managed Responses profile
    automatically. The hosted settings panel exposes exactly two things — which
-   API token to bill (optional) and which model to use — with the models the
-   account can actually call (dashboard `GET /api/user/models`) offered as
-   suggestions while free text stays possible. Everything else stays managed and
-   hidden. One image-model setting drives both gallery generation and the Agent
-   image tool (`imageGenerationModel`); a separate field sets the Agent text
-   model. Submission is gated by profile validity, not by the presence of an API
-   key.
+   API token to bill (optional) and which model to use — and the input bar's
+   model chip lists every model the selected token's group can call
+   (`GET /api/user/models`, scoped with `?group=`) in both gallery and Agent
+   mode, so switching models is one click; free text stays possible in settings.
+   Picking an image model in gallery mode also points the Agent image tool at it.
+   Everything else stays managed and hidden. One image-model setting drives both
+   gallery generation and the Agent image tool (`imageGenerationModel`); the
+   Agent text model is chosen the same way in Agent mode. Submission is gated by
+   profile validity, not by the presence of an API key.
    → `src/lib/apiProfiles.ts`, `src/components/InputBar.tsx`,
+   `src/hooks/useNewApiHostedModels.ts`,
    `src/components/NewApiHostedModelField.tsx`,
    `src/components/settings/AgentSettingsTab.tsx`, `SettingsModal.tsx`
 6. **Theme follows the dashboard, not the OS.** The dashboard posts
@@ -143,12 +148,13 @@ git -C /tmp/pg-patches format-patch --no-signature -o scripts/image-playground-p
 - API token selection is optional. Without a selected token, the backend uses
   the signed-in account's default group and quota through a temporary request
   context, so users do not need to create a token before using the playground.
-- Users choose their own model in the settings panel's 连接状态 tab; the choices
-  come from the account's available models (`GET /api/user/models`) and can also
-  be typed. Multiple models (comma separated) can be configured and switched from
-  the model chip in the input bar.
+- Users choose their own model: the input bar's model chip lists every model the
+  selected token's group can call (`GET /api/user/models`, scoped by the token's
+  group) in both gallery and Agent mode and applies the choice immediately; the
+  settings panel's 连接状态 and Agent tabs offer the same list as autocomplete and
+  also accept a typed model ID.
 - The image model applies to gallery generation and to the Agent image tool; the
-  Agent text model has its own field in the Agent tab.
+  Agent text model is picked from the same list while in Agent mode.
 - A selected API token is represented only by `token_id`; the backend verifies
   ownership, status, IP restrictions, group access, and quota before relaying.
 - Agent mode receives a managed Responses profile automatically and does not

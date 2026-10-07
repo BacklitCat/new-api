@@ -1,6 +1,6 @@
-From 96019968b30bd457c262dfd184ebb8e0ba532e48 Mon Sep 17 00:00:00 2001
+From 64632fd5f5e03e2b3153e28c545d3444dc2286a8 Mon Sep 17 00:00:00 2001
 From: pg <pg@local>
-Date: Wed, 7 Oct 2026 16:53:35 +0800
+Date: Wed, 7 Oct 2026 17:32:43 +0800
 Subject: [PATCH 7/7] test: cover the service worker asset scope
 
 ---

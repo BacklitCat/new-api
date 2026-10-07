@@ -1,22 +1,24 @@
-From 7e1460bfd55cfe7c54853379195e949cc2ffa3c7 Mon Sep 17 00:00:00 2001
+From 3d300b6bdaa6ab79a58f1b9f8f94e1fe45797747 Mon Sep 17 00:00:00 2001
 From: pg <pg@local>
-Date: Wed, 7 Oct 2026 16:53:35 +0800
+Date: Wed, 7 Oct 2026 17:32:43 +0800
 Subject: [PATCH 3/7] feat: let users choose the hosted token and model
 
 ---
- src/components/InputBar.tsx                  |  4 +-
- src/components/NewApiHostedModelField.tsx    | 67 +++++++++++++
+ src/components/InputBar.tsx                  | 33 +++++--
+ src/components/NewApiHostedModelField.tsx    | 51 ++++++++++
  src/components/NewApiHostedTokenSelect.tsx   | 98 ++++++++++++++++++++
  src/components/settings/AgentSettingsTab.tsx | 39 +++++++-
+ src/hooks/useNewApiHostedModels.ts           | 44 +++++++++
  src/lib/apiProfiles.ts                       | 43 +++++++--
  src/lib/newApiHostedSetup.test.ts            | 54 +++++++++++
- 6 files changed, 288 insertions(+), 17 deletions(-)
+ 7 files changed, 339 insertions(+), 23 deletions(-)
  create mode 100644 src/components/NewApiHostedModelField.tsx
  create mode 100644 src/components/NewApiHostedTokenSelect.tsx
+ create mode 100644 src/hooks/useNewApiHostedModels.ts
  create mode 100644 src/lib/newApiHostedSetup.test.ts
 
 diff --git a/src/components/InputBar.tsx b/src/components/InputBar.tsx
-index faeeb50..f3de848 100644
+index faeeb50..ed67d2e 100644
 --- a/src/components/InputBar.tsx
 +++ b/src/components/InputBar.tsx
 @@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
@@ -28,7 +30,58 @@ index faeeb50..f3de848 100644
  import { getImageGenerationModel, isGptImage25Model } from '../lib/imageModels'
  import { ensureImageCached, getCachedImage } from '../lib/imageCache'
  import { splitBatchPrompts } from '../lib/batchPrompts'
-@@ -452,7 +452,7 @@ export default function InputBar() {
+@@ -17,6 +17,8 @@ import { collectAgentRoundOutputImageSlots } from '../lib/agentImageReferences'
+ import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds } from '../lib/favoriteState'
+ import { getContentEditableCursor, getContentEditablePlainText, getContentEditableSelection, getMentionTagHtml, setContentEditableCursor, setContentEditableSelection, syncMentionTagSelection } from '../lib/contentEditableMentions'
+ import { useHintTooltip } from '../hooks/useHintTooltip'
++import { useNewApiHostedModels } from '../hooks/useNewApiHostedModels'
++import { NEW_API_HOSTED } from '../lib/newApiHosted'
+ import { downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getTaskOutputImageZipEntries } from '../lib/downloadImages'
+ import SizePickerModal from './SizePickerModal'
+ import { CloseIcon, CollapseIcon, ExpandIcon, SketchIcon } from './icons'
+@@ -429,10 +431,15 @@ export default function InputBar() {
+     return reusedProfile ? resolveApiProfileModel(reusedProfile, reusedTaskApiModel ?? undefined) : currentActiveProfile
+   }, [appMode, currentActiveProfile, reusedTaskApiModel, reusedTaskApiProfileId, settings])
+   const isTemporarilyReusedProfile = activeProfile.id !== currentActiveProfile.id
+-  const modelOptions = useMemo(() => (
+-    splitModelList(settings.profiles.find((profile) => profile.id === activeProfile.id)?.model ?? activeProfile.model)
+-      .map((model) => ({ label: model, value: model }))
+-  ), [activeProfile.id, activeProfile.model, settings.profiles])
++  const hostedModels = useNewApiHostedModels()
++  const modelOptions = useMemo(() => {
++    const storedModel = settings.profiles.find((profile) => profile.id === activeProfile.id)?.model ?? activeProfile.model
++    // 托管模式直接罗列当前令牌可用的全部模型，选中即切换（画廊与 Agent 同一套列表）
++    const names = NEW_API_HOSTED && !isTemporarilyReusedProfile
++      ? [...new Set([...splitModelList(storedModel), ...hostedModels])]
++      : splitModelList(storedModel)
++    return names.map((model) => ({ label: model, value: model }))
++  }, [activeProfile.id, activeProfile.model, hostedModels, isTemporarilyReusedProfile, settings.profiles])
+   const handleModelChange = useCallback((model: string) => {
+     // 临时复用其他配置时只切换本次复用的模型，不改动该配置记住的选择
+     if (isTemporarilyReusedProfile) {
+@@ -440,9 +447,19 @@ export default function InputBar() {
+       return
+     }
+     setSettings({
+-      profiles: settings.profiles.map((profile) => profile.id === activeProfile.id ? { ...profile, selectedModel: model } : profile),
++      profiles: settings.profiles.map((profile) => {
++        // 托管模式选中即写入配置
++        if (profile.id === activeProfile.id) {
++          return NEW_API_HOSTED ? { ...profile, model, selectedModel: undefined } : { ...profile, selectedModel: model }
++        }
++        // 画廊切换出图模型时，让 Agent 的图像工具跟随同一个模型
++        if (NEW_API_HOSTED && appMode === 'gallery' && profile.id === settings.agentTextProfileId) {
++          return { ...profile, imageGenerationModel: model }
++        }
++        return profile
++      }),
+     })
+-  }, [activeProfile.id, isTemporarilyReusedProfile, setReusedTaskApiModel, setSettings, settings.profiles])
++  }, [activeProfile.id, appMode, isTemporarilyReusedProfile, setReusedTaskApiModel, setSettings, settings.agentTextProfileId, settings.profiles])
+   const activeAgentConversation = appMode === 'agent'
+     ? agentConversations.find((conversation) => conversation.id === activeAgentConversationId) ?? null
+     : null
+@@ -452,7 +469,7 @@ export default function InputBar() {
        ? settings
        : normalizeSettings({ ...settings, activeProfileId: activeProfile.id })
    ), [activeProfile.id, settingsActiveProfile.id, settings])
@@ -39,13 +92,14 @@ index faeeb50..f3de848 100644
    const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig && !activeAgentIsRunning && !batchRunning)
 diff --git a/src/components/NewApiHostedModelField.tsx b/src/components/NewApiHostedModelField.tsx
 new file mode 100644
-index 0000000..40a8095
+index 0000000..07a4ad4
 --- /dev/null
 +++ b/src/components/NewApiHostedModelField.tsx
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,51 @@
 +import { useEffect, useId, useState } from 'react'
 +
-+import { fetchNewApiModelOptions, NEW_API_HOSTED } from '../lib/newApiHosted'
++import { useNewApiHostedModels } from '../hooks/useNewApiHostedModels'
++import { NEW_API_HOSTED } from '../lib/newApiHosted'
 +
 +interface NewApiHostedModelFieldProps {
 +  label: string
@@ -58,29 +112,12 @@ index 0000000..40a8095
 +export default function NewApiHostedModelField(props: NewApiHostedModelFieldProps) {
 +  const listId = useId()
 +  const [text, setText] = useState(props.value)
-+  const [options, setOptions] = useState<string[]>([])
++  // 当前令牌可用的模型作为候选，取不到时仍然允许手填
++  const models = useNewApiHostedModels()
 +
 +  useEffect(() => {
 +    setText(props.value)
 +  }, [props.value])
-+
-+  useEffect(() => {
-+    if (!NEW_API_HOSTED) return
-+    let cancelled = false
-+
-+    // 主站可用模型作为候选，取不到时仍然允许手填
-+    void fetchNewApiModelOptions()
-+      .then((items) => {
-+        if (!cancelled) setOptions(items)
-+      })
-+      .catch(() => {
-+        if (!cancelled) setOptions([])
-+      })
-+
-+    return () => {
-+      cancelled = true
-+    }
-+  }, [])
 +
 +  if (!NEW_API_HOSTED) return null
 +
@@ -100,7 +137,7 @@ index 0000000..40a8095
 +        className='w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:bg-white/[0.06] dark:text-gray-200 dark:focus:border-blue-500/50'
 +      />
 +      <datalist id={listId}>
-+        {options.map((model) => (
++        {models.map((model) => (
 +          <option key={model} value={model} />
 +        ))}
 +      </datalist>
@@ -112,7 +149,7 @@ index 0000000..40a8095
 +}
 diff --git a/src/components/NewApiHostedTokenSelect.tsx b/src/components/NewApiHostedTokenSelect.tsx
 new file mode 100644
-index 0000000..dd7a9d4
+index 0000000..f897feb
 --- /dev/null
 +++ b/src/components/NewApiHostedTokenSelect.tsx
 @@ -0,0 +1,98 @@
@@ -148,7 +185,7 @@ index 0000000..dd7a9d4
 +    if (!NEW_API_HOSTED || !hostedContext.accessToken) return
 +    let cancelled = false
 +
-+    void fetchNewApiTokenOptions()
++    void fetchNewApiTokenOptions(refreshVersion > 0)
 +      .then((items) => {
 +        if (cancelled) return
 +        setTokens(items)
@@ -215,7 +252,7 @@ index 0000000..dd7a9d4
 +  )
 +}
 diff --git a/src/components/settings/AgentSettingsTab.tsx b/src/components/settings/AgentSettingsTab.tsx
-index f2ed547..9089dc4 100644
+index f2ed547..3766637 100644
 --- a/src/components/settings/AgentSettingsTab.tsx
 +++ b/src/components/settings/AgentSettingsTab.tsx
 @@ -4,9 +4,11 @@ import {
@@ -248,7 +285,7 @@ index f2ed547..9089dc4 100644
 +            label="Agent 模型"
 +            value={draft.profiles.find((profile) => profile.id === draft.agentTextProfileId)?.model ?? ''}
 +            placeholder={DEFAULT_RESPONSES_MODEL}
-+            hint="需要使用支持 image_generation 工具的文本模型；出图模型在「连接状态」中设置。"
++            hint="需要使用支持 image_generation 工具的文本模型，候选同样来自当前令牌可用的模型；出图模型在「连接状态」中设置。"
 +            onCommit={(model) => {
 +              const target = draft.profiles.find((profile) => profile.id === draft.agentTextProfileId)
 +              if (!target) return
@@ -288,6 +325,56 @@ index f2ed547..9089dc4 100644
          </>
        )}
        <label className="block">
+diff --git a/src/hooks/useNewApiHostedModels.ts b/src/hooks/useNewApiHostedModels.ts
+new file mode 100644
+index 0000000..2967a1a
+--- /dev/null
++++ b/src/hooks/useNewApiHostedModels.ts
+@@ -0,0 +1,44 @@
++import { useEffect, useState, useSyncExternalStore } from 'react'
++
++import {
++  fetchNewApiModelOptions,
++  fetchNewApiTokenOptions,
++  getNewApiHostedContextSnapshot,
++  getSelectedNewApiTokenId,
++  NEW_API_HOSTED,
++  subscribeNewApiHostedContext,
++} from '../lib/newApiHosted'
++
++/**
++ * 托管模式下当前令牌可用的模型列表；未选择令牌时返回账户全部可用模型。
++ * 令牌变化、主站重新同步或重新挂载时刷新。
++ */
++export function useNewApiHostedModels(): string[] {
++  const hostedContext = useSyncExternalStore(
++    subscribeNewApiHostedContext,
++    getNewApiHostedContextSnapshot,
++    getNewApiHostedContextSnapshot
++  )
++  const [models, setModels] = useState<string[]>([])
++
++  useEffect(() => {
++    if (!NEW_API_HOSTED || !hostedContext.accessToken) return
++    let cancelled = false
++
++    void (async () => {
++      const selectedId = getSelectedNewApiTokenId()
++      const tokens = selectedId > 0 ? await fetchNewApiTokenOptions() : []
++      const group = tokens.find((token) => token.id === selectedId)?.group ?? ''
++      const items = await fetchNewApiModelOptions(group)
++      if (!cancelled) setModels(items)
++    })().catch(() => {
++      if (!cancelled) setModels([])
++    })
++
++    return () => {
++      cancelled = true
++    }
++  }, [hostedContext.accessToken, hostedContext.tokenId, hostedContext.revision])
++
++  return models
++}
 diff --git a/src/lib/apiProfiles.ts b/src/lib/apiProfiles.ts
 index 13b2155..200284c 100644
 --- a/src/lib/apiProfiles.ts

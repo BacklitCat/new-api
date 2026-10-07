@@ -1,14 +1,14 @@
-From 26e2ca260fde4f2ecdbde31d2d6c9db5b986f8c8 Mon Sep 17 00:00:00 2001
+From 564d0fe3775f20cb6a7103ac4a778f21e262e433 Mon Sep 17 00:00:00 2001
 From: pg <pg@local>
-Date: Wed, 7 Oct 2026 16:53:34 +0800
+Date: Wed, 7 Oct 2026 17:32:43 +0800
 Subject: [PATCH 1/7] feat: add New API hosted bridge
 
 ---
  src/App.tsx                  |   3 +
- src/lib/newApiHosted.test.ts | 187 +++++++++++++++++++++++++++++++++++
- src/lib/newApiHosted.ts      | 156 +++++++++++++++++++++++++++++
+ src/lib/newApiHosted.test.ts | 235 +++++++++++++++++++++++++++++++++++
+ src/lib/newApiHosted.ts      | 165 ++++++++++++++++++++++++
  src/vite-env.d.ts            |   1 +
- 4 files changed, 347 insertions(+)
+ 4 files changed, 404 insertions(+)
  create mode 100644 src/lib/newApiHosted.test.ts
  create mode 100644 src/lib/newApiHosted.ts
 
@@ -35,10 +35,10 @@ index d04bbae..70dd334 100644
      defaultConfigImportStarted = true
 diff --git a/src/lib/newApiHosted.test.ts b/src/lib/newApiHosted.test.ts
 new file mode 100644
-index 0000000..130985a
+index 0000000..c9d7a4f
 --- /dev/null
 +++ b/src/lib/newApiHosted.test.ts
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,235 @@
 +// @vitest-environment jsdom
 +
 +import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -149,8 +149,8 @@ index 0000000..130985a
 +        success: true,
 +        data: {
 +          items: [
-+            { id: 1, name: 'enabled', status: 1 },
-+            { id: 2, name: 'disabled', status: 2 },
++            { id: 1, name: 'enabled', status: 1, group: 'default' },
++            { id: 2, name: 'disabled', status: 2, group: 'vip' },
 +          ],
 +        },
 +      }),
@@ -164,8 +164,33 @@ index 0000000..130985a
 +      pushDashboardContext(parent.parentWindow)
 +
 +      await expect(hosted.fetchNewApiTokenOptions()).resolves.toEqual([
-+        { id: 1, name: 'enabled', status: 1 },
++        { id: 1, name: 'enabled', status: 1, group: 'default' },
 +      ])
++      dispose()
++    } finally {
++      parent.restore()
++    }
++  })
++
++  it('reuses the token list until the dropdown forces a refresh', async () => {
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      json: async () => ({ success: true, data: { items: [] } }),
++    })
++    vi.stubGlobal('fetch', fetchMock)
++    const parent = installParentWindow()
++
++    try {
++      const hosted = await import('./newApiHosted')
++      const dispose = hosted.initializeNewApiHostedBridge()
++      pushDashboardContext(parent.parentWindow)
++
++      await hosted.fetchNewApiTokenOptions()
++      await hosted.fetchNewApiTokenOptions()
++      expect(fetchMock).toHaveBeenCalledTimes(1)
++
++      await hosted.fetchNewApiTokenOptions(true)
++      expect(fetchMock).toHaveBeenCalledTimes(2)
 +      dispose()
 +    } finally {
 +      parent.restore()
@@ -204,6 +229,29 @@ index 0000000..130985a
 +    }
 +  })
 +
++  it('asks the dashboard for the selected token group models only', async () => {
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      json: async () => ({ success: true, data: ['gpt-image-2.5-sunburst'] }),
++    })
++    vi.stubGlobal('fetch', fetchMock)
++    const parent = installParentWindow()
++
++    try {
++      const hosted = await import('./newApiHosted')
++      const dispose = hosted.initializeNewApiHostedBridge()
++      pushDashboardContext(parent.parentWindow)
++
++      await expect(hosted.fetchNewApiModelOptions('vip')).resolves.toEqual(['gpt-image-2.5-sunburst'])
++      await expect(hosted.fetchNewApiModelOptions('vip')).resolves.toEqual(['gpt-image-2.5-sunburst'])
++      expect(fetchMock).toHaveBeenCalledTimes(1)
++      expect(fetchMock).toHaveBeenCalledWith('/api/user/models?group=vip', expect.anything())
++      dispose()
++    } finally {
++      parent.restore()
++    }
++  })
++
 +  it('uses gpt-5.6-sol for new Responses profiles', async () => {
 +    const profiles = await import('./apiProfiles')
 +
@@ -228,10 +276,10 @@ index 0000000..130985a
 +})
 diff --git a/src/lib/newApiHosted.ts b/src/lib/newApiHosted.ts
 new file mode 100644
-index 0000000..ab56125
+index 0000000..8d7b565
 --- /dev/null
 +++ b/src/lib/newApiHosted.ts
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,165 @@
 +const CONTEXT_MESSAGE = 'new-api:image-playground-context'
 +const READY_MESSAGE = 'new-api:image-playground-ready'
 +const TOKEN_STORAGE_KEY = 'new-api:image-playground-token-id'
@@ -343,10 +391,15 @@ index 0000000..ab56125
 +  id: number
 +  name: string
 +  status: number
++  group: string
 +}
 +
-+export async function fetchNewApiTokenOptions(): Promise<NewApiTokenOption[]> {
++let cachedTokenOptions: NewApiTokenOption[] | null = null
++
++export async function fetchNewApiTokenOptions(force = false): Promise<NewApiTokenOption[]> {
 +  if (!NEW_API_HOSTED || !hostedContextSnapshot.accessToken) return []
++  if (cachedTokenOptions && !force) return cachedTokenOptions
++
 +  const response = await fetch('/api/playground/image/tokens', {
 +    headers: getNewApiHostedRequestHeaders(''),
 +    cache: 'no-store',
@@ -359,19 +412,22 @@ index 0000000..ab56125
 +    data?: { items?: NewApiTokenOption[] }
 +  }
 +  if (!payload.success) throw new Error(payload.message || '加载令牌失败')
-+  return Array.isArray(payload.data?.items)
++  cachedTokenOptions = Array.isArray(payload.data?.items)
 +    ? payload.data.items.filter((token) => token.status === 1)
 +    : []
++  return cachedTokenOptions
 +}
 +
-+// 模型列表按会话缓存，避免同一页面反复请求主站
-+let cachedModelOptions: string[] | null = null
++// 模型列表按分组缓存，切换令牌或反复开面板时无需重复请求主站
++const modelOptionsCache = new Map<string, string[]>()
 +
-+export async function fetchNewApiModelOptions(): Promise<string[]> {
++export async function fetchNewApiModelOptions(group = ''): Promise<string[]> {
 +  if (!NEW_API_HOSTED || !hostedContextSnapshot.accessToken) return []
-+  if (cachedModelOptions) return cachedModelOptions
++  const cached = modelOptionsCache.get(group)
++  if (cached) return cached
 +
-+  const response = await fetch('/api/user/models', {
++  const query = group ? `?group=${encodeURIComponent(group)}` : ''
++  const response = await fetch(`/api/user/models${query}`, {
 +    headers: getNewApiHostedRequestHeaders(''),
 +    cache: 'no-store',
 +  })
@@ -383,10 +439,11 @@ index 0000000..ab56125
 +    data?: unknown
 +  }
 +  if (!payload.success) throw new Error(payload.message || '加载模型失败')
-+  cachedModelOptions = Array.isArray(payload.data)
++  const models = Array.isArray(payload.data)
 +    ? payload.data.filter((item): item is string => typeof item === 'string')
 +    : []
-+  return cachedModelOptions
++  modelOptionsCache.set(group, models)
++  return models
 +}
 diff --git a/src/vite-env.d.ts b/src/vite-env.d.ts
 index 82e8bfb..e921d92 100644

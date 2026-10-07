@@ -1,6 +1,6 @@
-From 5c2ebe40e2b9d5d6c31f4e8b7ea56808bb53b732 Mon Sep 17 00:00:00 2001
+From 71b6abd73dbfadb883abb502064e5b535f8db29b Mon Sep 17 00:00:00 2001
 From: pg <pg@local>
-Date: Wed, 7 Oct 2026 16:53:35 +0800
+Date: Wed, 7 Oct 2026 17:32:43 +0800
 Subject: [PATCH 2/7] feat: route hosted requests through /pg
 
 ---
