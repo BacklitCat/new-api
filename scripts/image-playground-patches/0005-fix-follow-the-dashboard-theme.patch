@@ -1,8 +1,23 @@
+From 9e0e87224d90140c190eeac74443022c42fa5668 Mon Sep 17 00:00:00 2001
+From: pg <pg@local>
+Date: Wed, 7 Oct 2026 16:53:35 +0800
+Subject: [PATCH 5/7] fix: follow the dashboard theme
+
+---
+ src/index.css                      | 122 +++++++++++++----------------
+ src/lib/newApiHosted.theme.test.ts |  49 ++++++++++++
+ tailwind.config.js                 |   2 +-
+ 3 files changed, 106 insertions(+), 67 deletions(-)
+ create mode 100644 src/lib/newApiHosted.theme.test.ts
+
 diff --git a/src/index.css b/src/index.css
 index 1c2cc04..47c5380 100644
 --- a/src/index.css
 +++ b/src/index.css
-@@ -72,13 +72,12 @@ body.drag-selecting * {
+@@ -69,23 +69,21 @@ body.drag-selecting * {
+   user-select: none !important;
+ }
+ 
 -@media (prefers-color-scheme: dark) {
 -  :root {
 -    --background: 240 10% 4%;
@@ -28,20 +43,32 @@ index 1c2cc04..47c5380 100644
 +  --sidebar: 240 5% 12%;
 +  --sidebar-foreground: 0 0% 98%;
 +}
-@@ -86,3 +85,2 @@ body.drag-selecting * {
+ 
 -  * {
 -    scrollbar-color: #3f3f46 transparent;
 -  }
 +html.dark * {
 +  scrollbar-color: #3f3f46 transparent;
-@@ -106,4 +104,2 @@ input[type="number"] {
+ }
+ 
+ ::-webkit-scrollbar { width: 8px; height: 8px; }
+@@ -103,10 +101,8 @@ input[type="number"] {
+   -moz-appearance: textfield;
+ }
+ 
 -@media (prefers-color-scheme: dark) {
 -  ::-webkit-scrollbar-thumb { background: #3f3f46; }
 -  ::-webkit-scrollbar-thumb:hover { background: #52525b; }
 -}
 +html.dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
 +html.dark ::-webkit-scrollbar-thumb:hover { background: #52525b; }
-@@ -142,5 +138,3 @@ input[type="number"] {
+ 
+ @keyframes pulse-border {
+   0%, 100% { border-color: #3b82f6; }
+@@ -139,11 +135,9 @@ input[type="number"] {
+   animation: agent-web-search-text-sweep 2.5s linear infinite;
+ }
+ 
 -@media (prefers-color-scheme: dark) {
 -  .agent-web-search-running-text {
 -    --agent-web-search-text: #9ca3af;
@@ -50,7 +77,13 @@ index 1c2cc04..47c5380 100644
 +html.dark .agent-web-search-running-text {
 +  --agent-web-search-text: #9ca3af;
 +  --agent-web-search-highlight: #ffffff;
-@@ -249,4 +243,3 @@ input[type="number"] {
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
+@@ -246,26 +240,24 @@ input[type="number"] {
+   border-radius: 0.75rem;
+ }
+ 
 -@media (prefers-color-scheme: dark) {
 -  .markdown-renderer :where(blockquote) {
 -    color: #a1a1aa;
@@ -58,34 +91,40 @@ index 1c2cc04..47c5380 100644
 +html.dark .markdown-renderer :where(blockquote) {
 +  color: #a1a1aa;
 +}
-@@ -254,3 +247,3 @@ input[type="number"] {
+ 
 -  .markdown-renderer :where(a) {
 -    color: #60a5fa;
 -  }
 +html.dark .markdown-renderer :where(a) {
 +  color: #60a5fa;
 +}
-@@ -258,3 +251,3 @@ input[type="number"] {
+ 
 -  .markdown-renderer :where(:not(pre) > code) {
 -    background: rgba(255, 255, 255, 0.1);
 -  }
 +html.dark .markdown-renderer :where(:not(pre) > code) {
 +  background: rgba(255, 255, 255, 0.1);
 +}
-@@ -262,3 +255,3 @@ input[type="number"] {
+ 
 -  .markdown-renderer :where(th, td) {
 -    border-color: rgba(255, 255, 255, 0.12);
 -  }
 +html.dark .markdown-renderer :where(th, td) {
 +  border-color: rgba(255, 255, 255, 0.12);
 +}
-@@ -266,3 +259,2 @@ input[type="number"] {
+ 
 -  .markdown-renderer :where(th) {
 -    background: rgba(255, 255, 255, 0.06);
 -  }
 +html.dark .markdown-renderer :where(th) {
 +  background: rgba(255, 255, 255, 0.06);
-@@ -453,6 +445,5 @@ input[type="number"] {
+ }
+ 
+ .mask-edge-r {
+@@ -450,35 +442,33 @@ input[type="number"] {
+   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+ }
+ 
 -@media (prefers-color-scheme: dark) {
 -  .mention-tag {
 -    background: rgba(59, 130, 246, 0.12);
@@ -97,7 +136,7 @@ index 1c2cc04..47c5380 100644
 +  color: #93c5fd;
 +  border-color: rgba(59, 130, 246, 0.2);
 +}
-@@ -460,5 +451,5 @@ input[type="number"] {
+ 
 -  .mention-tag::selection,
 -  .mention-tag *::selection {
 -    background: transparent !important;
@@ -108,7 +147,7 @@ index 1c2cc04..47c5380 100644
 +  background: transparent !important;
 +  color: inherit !important;
 +}
-@@ -466,5 +457,5 @@ input[type="number"] {
+ 
 -  [contenteditable]::selection,
 -  [contenteditable] *::selection {
 -    background: rgba(59, 130, 246, 0.3);
@@ -119,14 +158,14 @@ index 1c2cc04..47c5380 100644
 +  background: rgba(59, 130, 246, 0.3);
 +  color: inherit;
 +}
-@@ -472,3 +463,3 @@ input[type="number"] {
+ 
 -  .mention-tag:hover {
 -    background: rgba(59, 130, 246, 0.2);
 -  }
 +html.dark .mention-tag:hover {
 +  background: rgba(59, 130, 246, 0.2);
 +}
-@@ -476,6 +467,5 @@ input[type="number"] {
+ 
 -  .mention-tag.selected {
 -    background: #3b82f6;
 -    color: #ffffff;
@@ -138,15 +177,12 @@ index 1c2cc04..47c5380 100644
 +  color: #ffffff;
 +  border-color: #60a5fa;
 +  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.35);
-diff --git a/tailwind.config.js b/tailwind.config.js
-index c7dd5b4..3cd9417 100644
---- a/tailwind.config.js
-+++ b/tailwind.config.js
-@@ -5 +5 @@ export default {
--  darkMode: 'media',
-+  darkMode: 'class',
+ }
+ 
+ /* 修复 iOS/Webkit 上带圆角的滚动容器内容/滚动条溢出的 bug */
 diff --git a/src/lib/newApiHosted.theme.test.ts b/src/lib/newApiHosted.theme.test.ts
 new file mode 100644
+index 0000000..5871c1a
 --- /dev/null
 +++ b/src/lib/newApiHosted.theme.test.ts
 @@ -0,0 +1,49 @@
@@ -199,3 +235,16 @@ new file mode 100644
 +    cleanup()
 +  })
 +})
+diff --git a/tailwind.config.js b/tailwind.config.js
+index c7dd5b4..3cd9417 100644
+--- a/tailwind.config.js
++++ b/tailwind.config.js
+@@ -2,7 +2,7 @@ import colors from 'tailwindcss/colors';
+ 
+ /** @type {import('tailwindcss').Config} */
+ export default {
+-  darkMode: 'media',
++  darkMode: 'class',
+   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}', './node_modules/streamdown/dist/*.js'],
+   theme: {
+     extend: {

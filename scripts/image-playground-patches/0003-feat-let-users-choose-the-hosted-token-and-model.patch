@@ -1,0 +1,467 @@
+From 7e1460bfd55cfe7c54853379195e949cc2ffa3c7 Mon Sep 17 00:00:00 2001
+From: pg <pg@local>
+Date: Wed, 7 Oct 2026 16:53:35 +0800
+Subject: [PATCH 3/7] feat: let users choose the hosted token and model
+
+---
+ src/components/InputBar.tsx                  |  4 +-
+ src/components/NewApiHostedModelField.tsx    | 67 +++++++++++++
+ src/components/NewApiHostedTokenSelect.tsx   | 98 ++++++++++++++++++++
+ src/components/settings/AgentSettingsTab.tsx | 39 +++++++-
+ src/lib/apiProfiles.ts                       | 43 +++++++--
+ src/lib/newApiHostedSetup.test.ts            | 54 +++++++++++
+ 6 files changed, 288 insertions(+), 17 deletions(-)
+ create mode 100644 src/components/NewApiHostedModelField.tsx
+ create mode 100644 src/components/NewApiHostedTokenSelect.tsx
+ create mode 100644 src/lib/newApiHostedSetup.test.ts
+
+diff --git a/src/components/InputBar.tsx b/src/components/InputBar.tsx
+index faeeb50..f3de848 100644
+--- a/src/components/InputBar.tsx
++++ b/src/components/InputBar.tsx
+@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
+ import { deleteFavoriteCollection, useStore, submitTask, submitAgentMessage, stopAgentResponse, stopBatchPrompts, addImageFromFile, removeMultipleTasks, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
+ import { DEFAULT_PARAMS, MAX_INPUT_IMAGES, type TaskRecord } from '../types'
+ import { getActiveAgentRounds } from '../lib/agentConversationState'
+-import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings, resolveApiProfileModel, splitModelList } from '../lib/apiProfiles'
++import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings, resolveApiProfileModel, splitModelList, validateApiProfile } from '../lib/apiProfiles'
+ import { getImageGenerationModel, isGptImage25Model } from '../lib/imageModels'
+ import { ensureImageCached, getCachedImage } from '../lib/imageCache'
+ import { splitBatchPrompts } from '../lib/batchPrompts'
+@@ -452,7 +452,7 @@ export default function InputBar() {
+       ? settings
+       : normalizeSettings({ ...settings, activeProfileId: activeProfile.id })
+   ), [activeProfile.id, settingsActiveProfile.id, settings])
+-  const hasSubmitApiConfig = Boolean(activeProfile.apiKey)
++  const hasSubmitApiConfig = validateApiProfile(activeProfile) === null
+   // 批量进行中暂停画廊和 Agent 的提交，需等待完成或停止后再提交
+   const batchRunning = Boolean(batchProgress)
+   const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig && !activeAgentIsRunning && !batchRunning)
+diff --git a/src/components/NewApiHostedModelField.tsx b/src/components/NewApiHostedModelField.tsx
+new file mode 100644
+index 0000000..40a8095
+--- /dev/null
++++ b/src/components/NewApiHostedModelField.tsx
+@@ -0,0 +1,67 @@
++import { useEffect, useId, useState } from 'react'
++
++import { fetchNewApiModelOptions, NEW_API_HOSTED } from '../lib/newApiHosted'
++
++interface NewApiHostedModelFieldProps {
++  label: string
++  value: string
++  placeholder: string
++  hint: string
++  onCommit: (value: string) => void
++}
++
++export default function NewApiHostedModelField(props: NewApiHostedModelFieldProps) {
++  const listId = useId()
++  const [text, setText] = useState(props.value)
++  const [options, setOptions] = useState<string[]>([])
++
++  useEffect(() => {
++    setText(props.value)
++  }, [props.value])
++
++  useEffect(() => {
++    if (!NEW_API_HOSTED) return
++    let cancelled = false
++
++    // 主站可用模型作为候选，取不到时仍然允许手填
++    void fetchNewApiModelOptions()
++      .then((items) => {
++        if (!cancelled) setOptions(items)
++      })
++      .catch(() => {
++        if (!cancelled) setOptions([])
++      })
++
++    return () => {
++      cancelled = true
++    }
++  }, [])
++
++  if (!NEW_API_HOSTED) return null
++
++  return (
++    <label className='block'>
++      <span className='mb-1.5 block text-sm text-gray-600 dark:text-gray-300'>{props.label}</span>
++      <input
++        value={text}
++        onChange={(event) => setText(event.target.value)}
++        onBlur={() => props.onCommit(text)}
++        onKeyDown={(event) => {
++          if (event.key === 'Enter') event.currentTarget.blur()
++        }}
++        type='text'
++        list={listId}
++        placeholder={props.placeholder}
++        className='w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:bg-white/[0.06] dark:text-gray-200 dark:focus:border-blue-500/50'
++      />
++      <datalist id={listId}>
++        {options.map((model) => (
++          <option key={model} value={model} />
++        ))}
++      </datalist>
++      <div data-selectable-text className='mt-1.5 text-xs text-gray-500 dark:text-gray-500'>
++        {props.hint}
++      </div>
++    </label>
++  )
++}
+diff --git a/src/components/NewApiHostedTokenSelect.tsx b/src/components/NewApiHostedTokenSelect.tsx
+new file mode 100644
+index 0000000..dd7a9d4
+--- /dev/null
++++ b/src/components/NewApiHostedTokenSelect.tsx
+@@ -0,0 +1,98 @@
++import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
++
++import {
++  fetchNewApiTokenOptions,
++  getNewApiHostedContextSnapshot,
++  getSelectedNewApiTokenId,
++  NEW_API_HOSTED,
++  setSelectedNewApiTokenId,
++  subscribeNewApiHostedContext,
++  type NewApiTokenOption,
++} from '../lib/newApiHosted'
++import Select from './Select'
++
++interface NewApiHostedTokenSelectProps {
++  /** 在设置面板中显示标签与说明，页头使用紧凑样式 */
++  labeled?: boolean
++}
++
++export default function NewApiHostedTokenSelect({ labeled = false }: NewApiHostedTokenSelectProps) {
++  const hostedContext = useSyncExternalStore(
++    subscribeNewApiHostedContext,
++    getNewApiHostedContextSnapshot,
++    getNewApiHostedContextSnapshot
++  )
++  const [tokens, setTokens] = useState<NewApiTokenOption[]>([])
++  const [error, setError] = useState('')
++  const [refreshVersion, setRefreshVersion] = useState(0)
++
++  useEffect(() => {
++    if (!NEW_API_HOSTED || !hostedContext.accessToken) return
++    let cancelled = false
++
++    void fetchNewApiTokenOptions()
++      .then((items) => {
++        if (cancelled) return
++        setTokens(items)
++        setError('')
++        const currentId = getSelectedNewApiTokenId()
++        if (currentId > 0 && !items.some((item) => item.id === currentId)) {
++          setSelectedNewApiTokenId(0)
++        }
++      })
++      .catch((reason: unknown) => {
++        if (!cancelled) {
++          setError(reason instanceof Error ? reason.message : '加载令牌失败')
++        }
++      })
++
++    return () => {
++      cancelled = true
++    }
++  }, [hostedContext.accessToken, hostedContext.revision, refreshVersion])
++
++  const handleOpenChange = useCallback((isOpen: boolean) => {
++    if (isOpen) setRefreshVersion((version) => version + 1)
++  }, [])
++
++  if (!NEW_API_HOSTED) return null
++
++  const enabledTokens = tokens.filter((token) => token.status === 1)
++  const options = [
++    { label: '账户默认（无需令牌）', value: '0' },
++    ...enabledTokens.map((token) => ({
++      label: token.name,
++      value: String(token.id),
++    })),
++  ]
++  const select = (
++    <Select
++      value={String(hostedContext.tokenId)}
++      onChange={(value) => setSelectedNewApiTokenId(Number.parseInt(String(value), 10) || 0)}
++      options={options}
++      onOpenChange={handleOpenChange}
++      disabled={!hostedContext.accessToken}
++      className={labeled
++        ? 'w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none dark:bg-white/[0.06] dark:text-gray-200'
++        : 'w-full rounded-xl border border-gray-200/70 bg-white/60 px-2 py-1.5 text-xs text-gray-700 outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-200'}
++    />
++  )
++
++  if (!labeled) {
++    return (
++      <div className='hidden min-w-40 md:block' title={error || '选择 API 令牌（可选）'}>
++        {select}
++      </div>
++    )
++  }
++
++  return (
++    <label className='block'>
++      <span className='mb-1.5 block text-sm text-gray-600 dark:text-gray-300'>API 令牌</span>
++      {select}
++      <div data-selectable-text className='mt-1.5 text-xs text-gray-500 dark:text-gray-500'>
++        {error || '未选择时使用当前账户的分组与额度；选择后按该令牌的分组、额度与 IP 限制调用。'}
++      </div>
++    </label>
++  )
++}
+diff --git a/src/components/settings/AgentSettingsTab.tsx b/src/components/settings/AgentSettingsTab.tsx
+index f2ed547..9089dc4 100644
+--- a/src/components/settings/AgentSettingsTab.tsx
++++ b/src/components/settings/AgentSettingsTab.tsx
+@@ -4,9 +4,11 @@ import {
+   type ApiProfile,
+   type AppSettings,
+ } from '../../types'
+-import { normalizeAgentMaxToolRounds } from '../../lib/apiProfiles'
++import { DEFAULT_RESPONSES_MODEL, normalizeAgentMaxToolRounds } from '../../lib/apiProfiles'
++import { NEW_API_HOSTED } from '../../lib/newApiHosted'
+ import { isPresetAgentFieldLocked } from '../../lib/presetConfig'
+ import Select from '../Select'
++import NewApiHostedModelField from '../NewApiHostedModelField'
+ 
+ interface SelectOption {
+   label: string
+@@ -40,7 +42,32 @@ export default function AgentSettingsTab({
+ }: AgentSettingsTabProps) {
+   return (
+     <div className="space-y-4">
+-      <div className="block">
++      {NEW_API_HOSTED ? (
++        <div className="space-y-4">
++          <div className="rounded-2xl border border-blue-200/70 bg-blue-50/70 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
++            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Agent API 已自动配置</h3>
++            <p data-selectable-text className="mt-2 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
++              当前自动使用 Responses API，无需手动切换接口或填写 API Key。
++            </p>
++          </div>
++          <NewApiHostedModelField
++            label="Agent 模型"
++            value={draft.profiles.find((profile) => profile.id === draft.agentTextProfileId)?.model ?? ''}
++            placeholder={DEFAULT_RESPONSES_MODEL}
++            hint="需要使用支持 image_generation 工具的文本模型；出图模型在「连接状态」中设置。"
++            onCommit={(model) => {
++              const target = draft.profiles.find((profile) => profile.id === draft.agentTextProfileId)
++              if (!target) return
++              commitSettings({
++                ...draft,
++                profiles: draft.profiles.map((profile) => profile.id === target.id ? { ...profile, model } : profile),
++              })
++            }}
++          />
++        </div>
++      ) : (
++        <>
++          <div className="block">
+         <div className="mb-1 flex items-center justify-between gap-3">
+           <span className="block text-sm text-gray-600 dark:text-gray-300">使用独立的 API 配置</span>
+           <div className="w-20 shrink-0">
+@@ -64,10 +91,10 @@ export default function AgentSettingsTab({
+           <div>原生：使用原生的 Responses API 配置，由模型调用 <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.06]">image_generation</code> 工具生成图片。</div>
+           <div>混合：使用非原生的混合 API 配置，由文本模型调用自定义工具，请求图像模型生成图像，解决部分服务商/模型不支持 <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.06]">image_generation</code> 工具的问题。</div>
+         </div>
+-      </div>
++          </div>
+ 
+-      {draft.agentApiConfigMode !== 'off' && (
+-        <>
++          {draft.agentApiConfigMode !== 'off' && (
++            <>
+           <div className="block">
+             <div className="mb-1 flex items-center justify-between gap-3">
+               <span className="block text-sm text-gray-600 dark:text-gray-300">文本模型 API 配置</span>
+@@ -119,6 +146,8 @@ export default function AgentSettingsTab({
+               </div>
+             </div>
+           )}
++            </>
++          )}
+         </>
+       )}
+       <label className="block">
+diff --git a/src/lib/apiProfiles.ts b/src/lib/apiProfiles.ts
+index 13b2155..200284c 100644
+--- a/src/lib/apiProfiles.ts
++++ b/src/lib/apiProfiles.ts
+@@ -24,6 +24,7 @@ import { readRuntimeEnv } from './runtimeEnv'
+ import { isImportableConfigUrl } from './importableConfigUrl'
+ import { DEFAULT_IMAGES_MODEL } from './imageModels'
+ import { DEFAULT_BATCH_PROMPT_CONCURRENCY, normalizeBatchPromptConcurrency } from './batchPrompts'
++import { NEW_API_HOSTED } from './newApiHosted'
+ 
+ const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+ const RAW_DEFAULT_API_URL = readRuntimeEnv(import.meta.env.VITE_DEFAULT_API_URL)
+@@ -32,13 +33,15 @@ const DOCKER_DEPLOYMENT = readRuntimeEnv(import.meta.env.VITE_DOCKER_DEPLOYMENT)
+ const DEFAULT_API_URL_PATCH = isImportableConfigUrl(RAW_DEFAULT_API_URL)
+   ? null
+   : parseDefaultApiUrl(RAW_DEFAULT_API_URL || (DOCKER_DEPLOYMENT && DEFAULT_OPENAI_API_PROXY ? '' : OPENAI_DEFAULT_BASE_URL))
+-const DEFAULT_BASE_URL = DEFAULT_API_URL_PATCH?.baseUrl ?? ''
++// 托管模式下 API 地址固定为主站同源的 /pg，忽略部署端默认地址
++const DEFAULT_BASE_URL = NEW_API_HOSTED ? '/pg' : (DEFAULT_API_URL_PATCH?.baseUrl ?? '')
+ export { DEFAULT_IMAGES_MODEL } from './imageModels'
+ export const DEFAULT_RESPONSES_MODEL = 'gpt-5.6-sol'
+ export const DEFAULT_FAL_BASE_URL = 'https://fal.run'
+ export const DEFAULT_FAL_MODEL = 'openai/gpt-image-2'
+ export const DEFAULT_OPENAI_PROFILE_ID = 'default-openai'
+ export const DEFAULT_API_TIMEOUT = 600
++const NEW_API_HOSTED_AGENT_PROFILE_ID = 'new-api-hosted-agent'
+ 
+ const BUILT_IN_PROVIDER_IDS = new Set<ApiProvider>(['openai', 'sb2api-async', 'fal'])
+ const DEFAULT_CUSTOM_PROVIDER_PATHS = {
+@@ -365,6 +368,7 @@ export function normalizeCustomProviderDefinitions(input: unknown): CustomProvid
+ export function createDefaultOpenAIProfile(overrides: Partial<ApiProfile> = {}): ApiProfile {
+   const apiMode = overrides.apiMode ?? DEFAULT_API_URL_PATCH?.apiMode ?? 'images'
+   const streamImages = overrides.streamImages ?? DEFAULT_API_URL_PATCH?.streamImages ?? getDefaultStreamImages('openai', apiMode)
++  const defaultModel = apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL
+ 
+   return {
+     id: DEFAULT_OPENAI_PROFILE_ID,
+@@ -372,7 +376,7 @@ export function createDefaultOpenAIProfile(overrides: Partial<ApiProfile> = {}):
+     provider: 'openai',
+     baseUrl: DEFAULT_BASE_URL,
+     apiKey: DEFAULT_API_URL_PATCH?.apiKey ?? '',
+-    model: DEFAULT_API_URL_PATCH?.model ?? (apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL),
++    model: DEFAULT_API_URL_PATCH?.model ?? defaultModel,
+     imageGenerationModel: DEFAULT_API_URL_PATCH?.imageGenerationModel ?? DEFAULT_IMAGES_MODEL,
+     timeout: DEFAULT_API_TIMEOUT,
+     reasoningEffort: DEFAULT_API_URL_PATCH?.reasoningEffort,
+@@ -559,6 +563,9 @@ export function normalizeApiProfile(
+     ? createDefaultFalProfile(providerFallback)
+     : createDefaultOpenAIProfile({ ...providerFallback, apiMode })
+   const rawBaseUrl = typeof record.baseUrl === 'string' ? record.baseUrl : defaults.baseUrl
++  const rawModel = typeof record.model === 'string' && record.model.trim() ? normalizeModelList(record.model) : defaults.model
++  // 托管模式早期版本保存的 gpt-5.5 配置已不可用，迁移到当前默认 Responses 模型
++  const model = NEW_API_HOSTED && rawModel === 'gpt-5.5' ? DEFAULT_RESPONSES_MODEL : rawModel
+   const streamImages = provider === 'openai'
+     ? typeof record.streamImages === 'boolean' ? record.streamImages : defaults.streamImages
+     : false
+@@ -573,7 +580,7 @@ export function normalizeApiProfile(
+     provider,
+     baseUrl: provider === 'fal' ? rawBaseUrl.trim().replace(/\/+$/, '') : rawBaseUrl,
+     apiKey: typeof record.apiKey === 'string' ? record.apiKey : defaults.apiKey,
+-    model: (typeof record.model === 'string' && normalizeModelList(record.model)) || defaults.model,
++    model,
+     selectedModel: typeof record.selectedModel === 'string' && record.selectedModel.trim() ? record.selectedModel.trim() : undefined,
+     imageGenerationModel: typeof record.imageGenerationModel === 'string'
+       ? record.imageGenerationModel.trim()
+@@ -696,19 +703,35 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
+       })
+     : [legacyProfile]
+   const defaultProfileId = getDefaultApiProfileId({ profiles: normalizedProfiles })
+-  const profiles = normalizedProfiles.map((profile) => ({
++  const managedProfiles = normalizedProfiles.map((profile) => ({
+     ...profile,
+     isDefault: profile.id === defaultProfileId ? true : undefined,
+   }))
++  // 托管模式下 Agent 模式必须开箱可用：缺少 Responses 配置时自动补一份受管配置
++  const existingHostedAgentProfile = NEW_API_HOSTED
++    ? managedProfiles.find(isAgentTextApiProfile)
++    : null
++  const hostedAgentProfile = NEW_API_HOSTED
++    ? existingHostedAgentProfile ?? createDefaultOpenAIProfile({
++        id: NEW_API_HOSTED_AGENT_PROFILE_ID,
++        name: 'Agent',
++        apiMode: 'responses',
++      })
++    : null
++  const profiles = hostedAgentProfile && !existingHostedAgentProfile
++    ? [...managedProfiles, hostedAgentProfile]
++    : managedProfiles
+   const activeProfileId = typeof record.activeProfileId === 'string' && profiles.some((p) => p.id === record.activeProfileId)
+     ? record.activeProfileId
+     : profiles[0].id
+   const active = profiles.find((p) => p.id === activeProfileId) ?? profiles[0]
+-  const agentApiConfigMode = normalizeAgentApiConfigMode(record.agentApiConfigMode)
++  const agentApiConfigMode = NEW_API_HOSTED ? 'native' : normalizeAgentApiConfigMode(record.agentApiConfigMode)
+   const firstAgentTextProfile = profiles.find(isAgentTextApiProfile)
+-  const agentTextProfileId = typeof record.agentTextProfileId === 'string' && profiles.some((p) => p.id === record.agentTextProfileId && isAgentTextApiProfile(p))
+-    ? record.agentTextProfileId
+-    : (isAgentTextApiProfile(active) ? active.id : firstAgentTextProfile?.id ?? null)
++  const agentTextProfileId = hostedAgentProfile?.id ?? (
++    typeof record.agentTextProfileId === 'string' && profiles.some((p) => p.id === record.agentTextProfileId && isAgentTextApiProfile(p))
++      ? record.agentTextProfileId
++      : (isAgentTextApiProfile(active) ? active.id : firstAgentTextProfile?.id ?? null)
++  )
+   const agentImageProfileId = typeof record.agentImageProfileId === 'string' && profiles.some((p) => p.id === record.agentImageProfileId)
+     ? record.agentImageProfileId
+     : active.id
+@@ -923,8 +946,8 @@ export function getActiveApiProfile(settings: Partial<AppSettings> | unknown): A
+ 
+ export function validateApiProfile(profile: ApiProfile): string | null {
+   if (!profile.name.trim()) return '缺少名称'
+-  if (profile.provider !== 'fal' && !profile.baseUrl.trim() && !shouldUseApiProxy(profile.apiProxy)) return '缺少 API URL'
+-  if (!profile.apiKey.trim()) return '缺少 API Key'
++  if (!NEW_API_HOSTED && profile.provider !== 'fal' && !profile.baseUrl.trim() && !shouldUseApiProxy(profile.apiProxy)) return '缺少 API URL'
++  if (!NEW_API_HOSTED && !profile.apiKey.trim()) return '缺少 API Key'
+   if (!profile.model.trim()) return '缺少模型 ID'
+   return null
+ }
+diff --git a/src/lib/newApiHostedSetup.test.ts b/src/lib/newApiHostedSetup.test.ts
+new file mode 100644
+index 0000000..66bd3ab
+--- /dev/null
++++ b/src/lib/newApiHostedSetup.test.ts
+@@ -0,0 +1,54 @@
++// @vitest-environment jsdom
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++
++describe('New API hosted setup', () => {
++  beforeEach(() => {
++    vi.resetModules()
++    vi.stubEnv('VITE_NEW_API_HOSTED', 'true')
++    window.localStorage.clear()
++  })
++
++  afterEach(() => {
++    vi.unstubAllEnvs()
++  })
++
++  it('uses the account default when no API token has been selected', async () => {
++    const hosted = await import('./newApiHosted')
++
++    expect(hosted.withNewApiHostedToken({ model: 'gpt-image-2' })).toEqual({
++      model: 'gpt-image-2',
++    })
++  })
++
++  it('accepts the hosted gallery profile without an API key', async () => {
++    const profiles = await import('./apiProfiles')
++    const galleryProfile = profiles.createDefaultOpenAIProfile()
++
++    expect(galleryProfile.apiKey).toBe('')
++    expect(profiles.validateApiProfile(galleryProfile)).toBeNull()
++  })
++
++  it('provides a valid Responses profile for Agent mode automatically', async () => {
++    const profiles = await import('./apiProfiles')
++    const galleryProfile = profiles.createDefaultOpenAIProfile()
++    const settings = profiles.normalizeSettings({
++      ...profiles.DEFAULT_SETTINGS,
++      profiles: [galleryProfile],
++      activeProfileId: galleryProfile.id,
++      agentApiConfigMode: 'off',
++      agentTextProfileId: null,
++    })
++
++    expect(profiles.getActiveApiProfile(settings).apiMode).toBe('images')
++    expect(settings.agentApiConfigMode).toBe('native')
++
++    const agentProfile = profiles.getAgentTextApiProfile(settings)
++    expect(agentProfile).toMatchObject({
++      provider: 'openai',
++      apiMode: 'responses',
++      model: profiles.DEFAULT_RESPONSES_MODEL,
++    })
++    expect(agentProfile && profiles.validateApiProfile(agentProfile)).toBeNull()
++  })
++})

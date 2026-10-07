@@ -6,7 +6,7 @@ PLAYGROUND_DIR="${IMAGE_PLAYGROUND_DIR:-$HOME/Projects/gpt_image_playground}"
 DEST_DIR="${IMAGE_PLAYGROUND_DEST:-$ROOT_DIR/web/public/image-playground}"
 PATCH_DIR="$ROOT_DIR/scripts/image-playground-patches"
 SOURCE_REPO="https://github.com/CookSleep/gpt_image_playground.git"
-SOURCE_COMMIT="85af98984d866c574f7007245b3acded250efa6b"
+SOURCE_COMMIT="b1a73e542056da64cf2335436a551cd7e5879efe"
 APPLIED_PATCHES=()
 REVERSED_PATCHES=()
 
@@ -113,7 +113,7 @@ check_asset_contains() {
   fi
 }
 
-for pattern in "/pg" "token_id" "new-api:image-playground-context" "gpt-5.6-sol" "images/generations" "responses"; do
+for pattern in "/pg" "token_id" "new-api:image-playground-context" "new-api:image-playground-ready" "gpt-5.6-sol" "images/generations" "responses"; do
   check_asset_contains "$pattern"
 done
 

@@ -1,0 +1,222 @@
+From 5c2ebe40e2b9d5d6c31f4e8b7ea56808bb53b732 Mon Sep 17 00:00:00 2001
+From: pg <pg@local>
+Date: Wed, 7 Oct 2026 16:53:35 +0800
+Subject: [PATCH 2/7] feat: route hosted requests through /pg
+
+---
+ src/lib/agentApi.ts                 | 19 ++++++++++++-------
+ src/lib/devProxy.test.ts            | 12 ++++++++++++
+ src/lib/devProxy.ts                 |  5 ++++-
+ src/lib/openaiCompatibleImageApi.ts | 25 +++++++++++++++----------
+ 4 files changed, 43 insertions(+), 18 deletions(-)
+
+diff --git a/src/lib/agentApi.ts b/src/lib/agentApi.ts
+index 37d0270..a53a07e 100644
+--- a/src/lib/agentApi.ts
++++ b/src/lib/agentApi.ts
+@@ -4,6 +4,11 @@ import { appendStreamingFormatHint, getApiErrorMessage, getResponsesImageResultB
+ import { getImageGenerationModel } from './imageModels'
+ import { normalizeResponsesOutputItems } from './responsesOutputState'
+ import { isEventStreamResponse, readJsonServerSentEvents, throwIfAborted } from './serverSentEvents'
++import {
++  getNewApiHostedBaseUrl,
++  getNewApiHostedRequestHeaders,
++  withNewApiHostedToken,
++} from './newApiHosted'
+ 
+ export interface AgentApiResultImage {
+   toolCallId?: string
+@@ -102,7 +107,7 @@ const AGENT_TITLE_MAX_LENGTH = 28
+ 
+ function createHeaders(profile: ApiProfile): Record<string, string> {
+   return {
+-    Authorization: `Bearer ${profile.apiKey}`,
++    ...getNewApiHostedRequestHeaders(profile.apiKey),
+     'Content-Type': 'application/json',
+   }
+ }
+@@ -627,11 +632,11 @@ export async function callAgentResponsesApi(opts: {
+       body.stream = true
+     }
+ 
+-    const response = await fetch(buildApiUrl(profile.baseUrl, 'responses', proxyConfig, useApiProxy), {
++    const response = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), 'responses', proxyConfig, useApiProxy), {
+       method: 'POST',
+       headers: createHeaders(profile),
+       cache: 'no-store',
+-      body: JSON.stringify(body),
++      body: JSON.stringify(withNewApiHostedToken(body)),
+       signal: controller.signal,
+     })
+ 
+@@ -692,11 +697,11 @@ export async function callAgentConversationTitleApi(opts: {
+     }
+     if (profile.reasoningEffort) body.reasoning = { effort: profile.reasoningEffort }
+ 
+-    const response = await fetch(buildApiUrl(profile.baseUrl, 'responses', proxyConfig, useApiProxy), {
++    const response = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), 'responses', proxyConfig, useApiProxy), {
+       method: 'POST',
+       headers: createHeaders(profile),
+       cache: 'no-store',
+-      body: JSON.stringify(body),
++      body: JSON.stringify(withNewApiHostedToken(body)),
+       signal: controller.signal,
+     })
+ 
+@@ -806,11 +811,11 @@ export async function callBatchImageSingle(opts: {
+       body.stream = true
+     }
+ 
+-    const response = await fetch(buildApiUrl(profile.baseUrl, 'responses', proxyConfig, useApiProxy), {
++    const response = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), 'responses', proxyConfig, useApiProxy), {
+       method: 'POST',
+       headers: createHeaders(profile),
+       cache: 'no-store',
+-      body: JSON.stringify(body),
++      body: JSON.stringify(withNewApiHostedToken(body)),
+       signal: controller.signal,
+     })
+ 
+diff --git a/src/lib/devProxy.test.ts b/src/lib/devProxy.test.ts
+index 4b15a34..3ae471f 100644
+--- a/src/lib/devProxy.test.ts
++++ b/src/lib/devProxy.test.ts
+@@ -15,6 +15,18 @@ describe('normalizeBaseUrl', () => {
+ })
+ 
+ describe('buildApiUrl', () => {
++  it('keeps hosted same-origin base paths relative', () => {
++    expect(buildApiUrl('/pg', 'images/generations', null, false)).toBe(
++      '/pg/images/generations',
++    )
++  })
++
++  it('keeps a versioned relative API base path intact', () => {
++    expect(buildApiUrl('/api/v1', 'responses', null, false)).toBe(
++      '/api/v1/responses',
++    )
++  })
++
+   it('uses the same-origin proxy prefix when API proxy is enabled', () => {
+     expect(buildApiUrl('http://api.example.com/v1', 'images/edits', null, true)).toBe(
+       '/api-proxy/images/edits',
+diff --git a/src/lib/devProxy.ts b/src/lib/devProxy.ts
+index 7b9b42d..7c4a424 100644
+--- a/src/lib/devProxy.ts
++++ b/src/lib/devProxy.ts
+@@ -13,6 +13,7 @@ const DEFAULT_PROXY_PREFIX = '/api-proxy'
+ export function normalizeBaseUrl(baseUrl: string): string {
+   const trimmed = baseUrl.trim()
+   if (!trimmed) return ''
++  if (trimmed.startsWith('/')) return trimmed.replace(/\/+$/, '')
+ 
+   const input = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)
+     ? trimmed
+@@ -63,13 +64,15 @@ export function buildApiUrl(
+   useApiProxy = false,
+ ): string {
+   const trimmedBaseUrl = baseUrl.trim()
++  const normalizedBaseUrl = normalizeBaseUrl(trimmedBaseUrl)
+   const endpointPath = path.replace(/^\/+/, '')
++  // 同源相对地址（如托管模式的 /pg）原样拼接，不补 /v1 前缀
++  if (normalizedBaseUrl.startsWith('/')) return `${normalizedBaseUrl}/${endpointPath}`
+ 
+   if (useApiProxy) {
+     return `${proxyConfig?.prefix ?? DEFAULT_PROXY_PREFIX}/${endpointPath}`
+   }
+ 
+-  const normalizedBaseUrl = normalizeBaseUrl(trimmedBaseUrl)
+   if (trimmedBaseUrl.endsWith('/')) {
+     return `${normalizedBaseUrl.replace(/\/+$/, '')}/${endpointPath}`
+   }
+diff --git a/src/lib/openaiCompatibleImageApi.ts b/src/lib/openaiCompatibleImageApi.ts
+index 481934b..23ae819 100644
+--- a/src/lib/openaiCompatibleImageApi.ts
++++ b/src/lib/openaiCompatibleImageApi.ts
+@@ -24,6 +24,12 @@ import {
+   PROMPT_REWRITE_GUARD_PREFIX,
+ } from './imageApiShared'
+ import { getImageGenerationModel } from './imageModels'
++import {
++  appendNewApiHostedToken,
++  getNewApiHostedBaseUrl,
++  getNewApiHostedRequestHeaders,
++  withNewApiHostedToken,
++} from './newApiHosted'
+ import { isEventStreamResponse, readJsonServerSentEvents } from './serverSentEvents'
+ import { prependCodexCliSizePrompt } from './size'
+ 
+@@ -88,9 +94,7 @@ function normalizeImageApiPayload(value: unknown): ImageApiResponse {
+ }
+ 
+ function createRequestHeaders(profile: ApiProfile): Record<string, string> {
+-  return {
+-    Authorization: `Bearer ${profile.apiKey}`,
+-  }
++  return getNewApiHostedRequestHeaders(profile.apiKey)
+ }
+ 
+ function isRecordValue(value: unknown): value is Record<string, unknown> {
+@@ -559,8 +563,9 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): P
+       if (maskBlob) {
+         formData.append('mask', maskBlob, 'mask.png')
+       }
++      appendNewApiHostedToken(formData)
+ 
+-      response = await fetch(buildApiUrl(profile.baseUrl, paths.editPath, proxyConfig, useApiProxy), {
++      response = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), paths.editPath, proxyConfig, useApiProxy), {
+         method: 'POST',
+         headers: requestHeaders,
+         cache: 'no-store',
+@@ -601,14 +606,14 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): P
+         body.partial_images = getStreamPartialImages(profile)
+       }
+ 
+-      response = await fetch(buildApiUrl(profile.baseUrl, paths.generationPath, proxyConfig, useApiProxy), {
++      response = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), paths.generationPath, proxyConfig, useApiProxy), {
+         method: 'POST',
+         headers: {
+           ...requestHeaders,
+           'Content-Type': 'application/json',
+         },
+         cache: 'no-store',
+-        body: JSON.stringify(body),
++        body: JSON.stringify(withNewApiHostedToken(body)),
+         signal: controller.signal,
+       })
+     }
+@@ -824,7 +829,7 @@ async function submitCustomRequest(mapping: CustomProviderSubmitMapping, opts: C
+     }
+   }
+ 
+-  const response = await fetch(buildApiUrl(profile.baseUrl, path, proxyConfig, useApiProxy), {
++  const response = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), path, proxyConfig, useApiProxy), {
+     method,
+     headers,
+     cache: 'no-store',
+@@ -862,7 +867,7 @@ async function pollCustomTaskResult(
+     const taskPath = appendQuery(buildTaskPath(poll.path, taskId), poll.query)
+     let taskPayload: unknown
+     try {
+-      const taskResponse = await fetch(buildApiUrl(profile.baseUrl, taskPath, proxyConfig, false), {
++      const taskResponse = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), taskPath, proxyConfig, false), {
+         method: poll.method ?? 'GET',
+         headers: requestHeaders,
+         cache: 'no-store',
+@@ -1039,14 +1044,14 @@ async function callResponsesImageApiSingle(opts: CallApiOptions, profile: ApiPro
+       body.stream = true
+     }
+ 
+-    const response = await fetch(buildApiUrl(profile.baseUrl, 'responses', proxyConfig, useApiProxy), {
++    const response = await fetch(buildApiUrl(getNewApiHostedBaseUrl(profile.baseUrl), 'responses', proxyConfig, useApiProxy), {
+       method: 'POST',
+       headers: {
+         ...requestHeaders,
+         'Content-Type': 'application/json',
+       },
+       cache: 'no-store',
+-      body: JSON.stringify(body),
++      body: JSON.stringify(withNewApiHostedToken(body)),
+       signal: controller.signal,
+     })
+ 

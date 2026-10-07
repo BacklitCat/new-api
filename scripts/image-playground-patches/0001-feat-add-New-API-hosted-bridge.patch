@@ -1,0 +1,402 @@
+From 26e2ca260fde4f2ecdbde31d2d6c9db5b986f8c8 Mon Sep 17 00:00:00 2001
+From: pg <pg@local>
+Date: Wed, 7 Oct 2026 16:53:34 +0800
+Subject: [PATCH 1/7] feat: add New API hosted bridge
+
+---
+ src/App.tsx                  |   3 +
+ src/lib/newApiHosted.test.ts | 187 +++++++++++++++++++++++++++++++++++
+ src/lib/newApiHosted.ts      | 156 +++++++++++++++++++++++++++++
+ src/vite-env.d.ts            |   1 +
+ 4 files changed, 347 insertions(+)
+ create mode 100644 src/lib/newApiHosted.test.ts
+ create mode 100644 src/lib/newApiHosted.ts
+
+diff --git a/src/App.tsx b/src/App.tsx
+index d04bbae..70dd334 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -22,6 +22,7 @@ import ImageContextMenu from './components/ImageContextMenu'
+ import SupportPromptModal from './components/SupportPromptModal'
+ import { FavoriteCollectionPickerModal, FavoriteCollectionsView, ManageCollectionsModal } from './components/FavoriteCollections'
+ import { useGlobalClickSuppression } from './lib/clickSuppression'
++import { initializeNewApiHostedBridge } from './lib/newApiHosted'
+ 
+ let defaultConfigImportStarted = false
+ 
+@@ -32,6 +33,8 @@ export default function App() {
+   useDockerApiUrlMigrationNotice()
+   useGlobalClickSuppression()
+ 
++  useEffect(() => initializeNewApiHostedBridge(), [])
++
+   useEffect(() => {
+     if (defaultConfigImportStarted) return
+     defaultConfigImportStarted = true
+diff --git a/src/lib/newApiHosted.test.ts b/src/lib/newApiHosted.test.ts
+new file mode 100644
+index 0000000..130985a
+--- /dev/null
++++ b/src/lib/newApiHosted.test.ts
+@@ -0,0 +1,187 @@
++// @vitest-environment jsdom
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++
++function installParentWindow() {
++  const originalParent = window.parent
++  const parentWindow = { postMessage: vi.fn() }
++  Object.defineProperty(window, 'parent', {
++    configurable: true,
++    value: parentWindow,
++  })
++  return {
++    parentWindow,
++    restore: () => Object.defineProperty(window, 'parent', {
++      configurable: true,
++      value: originalParent,
++    }),
++  }
++}
++
++function pushDashboardContext(parentWindow: { postMessage: unknown }, data: Record<string, unknown> = {}) {
++  window.dispatchEvent(new MessageEvent('message', {
++    source: parentWindow as unknown as WindowProxy,
++    origin: window.location.origin,
++    data: { type: 'new-api:image-playground-context', accessToken: 'dashboard-token', ...data },
++  }))
++}
++
++describe('New API hosted integration', () => {
++  beforeEach(() => {
++    vi.resetModules()
++    vi.stubEnv('VITE_NEW_API_HOSTED', 'true')
++    window.localStorage.clear()
++  })
++
++  afterEach(() => {
++    vi.unstubAllEnvs()
++    vi.unstubAllGlobals()
++  })
++
++  it('routes requests through /pg and adds only the selected token id', async () => {
++    const hosted = await import('./newApiHosted')
++
++    hosted.setSelectedNewApiTokenId(42)
++
++    expect(hosted.getNewApiHostedBaseUrl('https://api.example.com/v1')).toBe(
++      '/pg'
++    )
++    expect(hosted.withNewApiHostedToken({ model: 'gpt-image-2' })).toEqual({
++      model: 'gpt-image-2',
++      token_id: 42,
++    })
++  })
++
++  it('publishes the selected token id so every selector stays in sync', async () => {
++    const hosted = await import('./newApiHosted')
++    const before = hosted.getNewApiHostedContextSnapshot()
++
++    hosted.setSelectedNewApiTokenId(7)
++
++    const after = hosted.getNewApiHostedContextSnapshot()
++    expect(after.tokenId).toBe(7)
++    expect(after).not.toBe(before)
++  })
++
++  it('publishes a new context snapshot for repeated dashboard sync messages', async () => {
++    const parent = installParentWindow()
++
++    try {
++      const hosted = await import('./newApiHosted')
++      const dispose = hosted.initializeNewApiHostedBridge()
++      const firstSnapshot = hosted.getNewApiHostedContextSnapshot()
++      const contextMessage = new MessageEvent('message', {
++        source: parent.parentWindow as unknown as WindowProxy,
++        origin: window.location.origin,
++        data: {
++          type: 'new-api:image-playground-context',
++          accessToken: 'dashboard-token',
++        },
++      })
++
++      window.dispatchEvent(contextMessage)
++      const secondSnapshot = hosted.getNewApiHostedContextSnapshot()
++      window.dispatchEvent(contextMessage)
++      const thirdSnapshot = hosted.getNewApiHostedContextSnapshot()
++
++      expect(secondSnapshot).toEqual({
++        accessToken: 'dashboard-token',
++        tokenId: 0,
++        revision: firstSnapshot.revision + 1,
++      })
++      expect(thirdSnapshot).toEqual({
++        accessToken: 'dashboard-token',
++        tokenId: 0,
++        revision: secondSnapshot.revision + 1,
++      })
++      expect(thirdSnapshot).not.toBe(secondSnapshot)
++      dispose()
++    } finally {
++      parent.restore()
++    }
++  })
++
++  it('returns only enabled token options', async () => {
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      json: async () => ({
++        success: true,
++        data: {
++          items: [
++            { id: 1, name: 'enabled', status: 1 },
++            { id: 2, name: 'disabled', status: 2 },
++          ],
++        },
++      }),
++    })
++    vi.stubGlobal('fetch', fetchMock)
++    const parent = installParentWindow()
++
++    try {
++      const hosted = await import('./newApiHosted')
++      const dispose = hosted.initializeNewApiHostedBridge()
++      pushDashboardContext(parent.parentWindow)
++
++      await expect(hosted.fetchNewApiTokenOptions()).resolves.toEqual([
++        { id: 1, name: 'enabled', status: 1 },
++      ])
++      dispose()
++    } finally {
++      parent.restore()
++    }
++  })
++
++  it('loads the models the account can use once per session', async () => {
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      json: async () => ({
++        success: true,
++        data: ['gpt-image-2', 'gpt-image-2.5-sunburst', 42],
++      }),
++    })
++    vi.stubGlobal('fetch', fetchMock)
++    const parent = installParentWindow()
++
++    try {
++      const hosted = await import('./newApiHosted')
++      const dispose = hosted.initializeNewApiHostedBridge()
++      pushDashboardContext(parent.parentWindow)
++
++      await expect(hosted.fetchNewApiModelOptions()).resolves.toEqual([
++        'gpt-image-2',
++        'gpt-image-2.5-sunburst',
++      ])
++      await expect(hosted.fetchNewApiModelOptions()).resolves.toEqual([
++        'gpt-image-2',
++        'gpt-image-2.5-sunburst',
++      ])
++      expect(fetchMock).toHaveBeenCalledTimes(1)
++      expect(fetchMock).toHaveBeenCalledWith('/api/user/models', expect.anything())
++      dispose()
++    } finally {
++      parent.restore()
++    }
++  })
++
++  it('uses gpt-5.6-sol for new Responses profiles', async () => {
++    const profiles = await import('./apiProfiles')
++
++    expect(
++      profiles.createDefaultOpenAIProfile({ apiMode: 'responses' }).model
++    ).toBe('gpt-5.6-sol')
++  })
++
++  it('migrates a hosted gpt-5.5 profile to gpt-5.6-sol', async () => {
++    const profiles = await import('./apiProfiles')
++
++    expect(
++      profiles.normalizeApiProfile({
++        id: 'legacy',
++        name: 'Legacy',
++        provider: 'openai',
++        apiMode: 'responses',
++        model: 'gpt-5.5',
++      }).model
++    ).toBe('gpt-5.6-sol')
++  })
++})
+diff --git a/src/lib/newApiHosted.ts b/src/lib/newApiHosted.ts
+new file mode 100644
+index 0000000..ab56125
+--- /dev/null
++++ b/src/lib/newApiHosted.ts
+@@ -0,0 +1,156 @@
++const CONTEXT_MESSAGE = 'new-api:image-playground-context'
++const READY_MESSAGE = 'new-api:image-playground-ready'
++const TOKEN_STORAGE_KEY = 'new-api:image-playground-token-id'
++
++export const NEW_API_HOSTED = import.meta.env.VITE_NEW_API_HOSTED === 'true'
++
++export interface NewApiHostedContextSnapshot {
++  accessToken: string
++  tokenId: number
++  revision: number
++}
++
++let selectedTokenId = readSelectedTokenId()
++let hostedContextSnapshot: NewApiHostedContextSnapshot = {
++  accessToken: '',
++  tokenId: selectedTokenId,
++  revision: 0,
++}
++const listeners = new Set<() => void>()
++
++function readSelectedTokenId(): number {
++  if (typeof window === 'undefined') return 0
++  const parsed = Number.parseInt(window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? '', 10)
++  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0
++}
++
++function emitChange() {
++  for (const listener of listeners) listener()
++}
++
++function applyTheme(theme: unknown) {
++  if (theme !== 'light' && theme !== 'dark') return
++  document.documentElement.classList.remove('light', 'dark')
++  document.documentElement.classList.add(theme)
++}
++
++export function initializeNewApiHostedBridge(): () => void {
++  if (!NEW_API_HOSTED || window.parent === window) return () => {}
++
++  const handleMessage = (event: MessageEvent) => {
++    if (
++      event.source !== window.parent ||
++      event.origin !== window.location.origin ||
++      event.data?.type !== CONTEXT_MESSAGE
++    ) {
++      return
++    }
++
++    hostedContextSnapshot = {
++      ...hostedContextSnapshot,
++      accessToken:
++        typeof event.data.accessToken === 'string' ? event.data.accessToken : '',
++      revision: hostedContextSnapshot.revision + 1,
++    }
++    applyTheme(event.data.theme)
++    emitChange()
++  }
++
++  window.addEventListener('message', handleMessage)
++  window.parent.postMessage({ type: READY_MESSAGE }, window.location.origin)
++  return () => window.removeEventListener('message', handleMessage)
++}
++
++export function subscribeNewApiHostedContext(listener: () => void): () => void {
++  listeners.add(listener)
++  return () => listeners.delete(listener)
++}
++
++export function getNewApiHostedContextSnapshot(): NewApiHostedContextSnapshot {
++  return hostedContextSnapshot
++}
++
++export function getNewApiHostedBaseUrl(baseUrl: string): string {
++  return NEW_API_HOSTED ? '/pg' : baseUrl
++}
++
++export function getNewApiHostedRequestHeaders(apiKey: string): Record<string, string> {
++  const token = NEW_API_HOSTED ? hostedContextSnapshot.accessToken : apiKey
++  return token ? { Authorization: `Bearer ${token}` } : {}
++}
++
++export function withNewApiHostedToken<T extends Record<string, unknown>>(body: T): T {
++  if (!NEW_API_HOSTED || selectedTokenId <= 0) return body
++  return { ...body, token_id: selectedTokenId }
++}
++
++export function appendNewApiHostedToken(formData: FormData): void {
++  if (NEW_API_HOSTED && selectedTokenId > 0) {
++    formData.set('token_id', String(selectedTokenId))
++  }
++}
++
++export function getSelectedNewApiTokenId(): number {
++  return selectedTokenId
++}
++
++export function setSelectedNewApiTokenId(tokenId: number): void {
++  selectedTokenId = Number.isInteger(tokenId) && tokenId > 0 ? tokenId : 0
++  if (selectedTokenId > 0) {
++    window.localStorage.setItem(TOKEN_STORAGE_KEY, String(selectedTokenId))
++  } else {
++    window.localStorage.removeItem(TOKEN_STORAGE_KEY)
++  }
++  hostedContextSnapshot = { ...hostedContextSnapshot, tokenId: selectedTokenId }
++  emitChange()
++}
++
++export interface NewApiTokenOption {
++  id: number
++  name: string
++  status: number
++}
++
++export async function fetchNewApiTokenOptions(): Promise<NewApiTokenOption[]> {
++  if (!NEW_API_HOSTED || !hostedContextSnapshot.accessToken) return []
++  const response = await fetch('/api/playground/image/tokens', {
++    headers: getNewApiHostedRequestHeaders(''),
++    cache: 'no-store',
++  })
++  if (!response.ok) throw new Error(`加载令牌失败 (${response.status})`)
++
++  const payload = (await response.json()) as {
++    success?: boolean
++    message?: string
++    data?: { items?: NewApiTokenOption[] }
++  }
++  if (!payload.success) throw new Error(payload.message || '加载令牌失败')
++  return Array.isArray(payload.data?.items)
++    ? payload.data.items.filter((token) => token.status === 1)
++    : []
++}
++
++// 模型列表按会话缓存，避免同一页面反复请求主站
++let cachedModelOptions: string[] | null = null
++
++export async function fetchNewApiModelOptions(): Promise<string[]> {
++  if (!NEW_API_HOSTED || !hostedContextSnapshot.accessToken) return []
++  if (cachedModelOptions) return cachedModelOptions
++
++  const response = await fetch('/api/user/models', {
++    headers: getNewApiHostedRequestHeaders(''),
++    cache: 'no-store',
++  })
++  if (!response.ok) throw new Error(`加载模型失败 (${response.status})`)
++
++  const payload = (await response.json()) as {
++    success?: boolean
++    message?: string
++    data?: unknown
++  }
++  if (!payload.success) throw new Error(payload.message || '加载模型失败')
++  cachedModelOptions = Array.isArray(payload.data)
++    ? payload.data.filter((item): item is string => typeof item === 'string')
++    : []
++  return cachedModelOptions
++}
+diff --git a/src/vite-env.d.ts b/src/vite-env.d.ts
+index 82e8bfb..e921d92 100644
+--- a/src/vite-env.d.ts
++++ b/src/vite-env.d.ts
+@@ -13,6 +13,7 @@ interface ImportMetaEnv {
+   readonly VITE_LOCK_PRESET_CONFIG_PARAMS?: string
+   readonly VITE_PREVENT_PRESET_CONFIG_DELETION?: string
+   readonly VITE_SHOW_DEFAULT_CONFIG_ONLY?: string
++  readonly VITE_NEW_API_HOSTED?: string
+ }
+ 
+ interface ImportMeta {
