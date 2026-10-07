@@ -31,4 +31,6 @@ func TestGetImagePlaygroundTokensReturnsOnlyEnabledTokens(t *testing.T) {
 	require.Len(t, data.Items, 1)
 	assert.Equal(t, enabledToken.Id, data.Items[0].Id)
 	assert.Equal(t, common.TokenStatusEnabled, data.Items[0].Status)
+	// 前端按令牌所属分组拉取其可用模型
+	assert.Equal(t, "default", data.Items[0].Group)
 }

@@ -19,6 +19,7 @@ type imagePlaygroundTokenOption struct {
 	Id     int    `json:"id"`
 	Name   string `json:"name"`
 	Status int    `json:"status"`
+	Group  string `json:"group"`
 }
 
 func Playground(c *gin.Context) {
@@ -161,6 +162,7 @@ func GetImagePlaygroundTokens(c *gin.Context) {
 			Id:     token.Id,
 			Name:   token.Name,
 			Status: token.Status,
+			Group:  token.Group,
 		})
 	}
 	common.ApiSuccess(c, gin.H{"items": options})
